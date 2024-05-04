@@ -1,0 +1,30 @@
+{
+	"animal_type": "Lion",
+	"texture": "animal_lion",
+    "max_age": 1,
+    "max_days_before_reproduction": 1,
+	"resource_requirements": {
+		"carnivore_food": {
+			"neededForSurvival": true,
+			"neededForReproduction": true,
+			"priority": 0,
+			"dailyUsageRate": [1,1],
+			"reproductionUsageRate": [1,1]
+		}
+	},
+	"base_speed": [70,100],
+	"prey":{
+		"Deer": 3
+	},
+    "resource_on_death": "scavanger_meat",
+    "resource_count_on_death": 3,
+    "starting_number": 0,
+	"reproduction_reward": 100,
+	"living_reward":-1,
+	"gathering_reward": -10,
+	"hunting_reward": 17,
+	"death_by_hunger_reward": 0,
+	"experimentation_factor": 60,
+	"experimentation_factor_decay": 1,
+	"max_hunt_per_day": 2
+}	

@@ -1,0 +1,33 @@
+	{
+	"animal_deer": {
+		"texture_name": "animal_deer.png",
+		"width": 32,
+		"height": 32
+	},
+	"animal_lion": {
+		"texture_name": "animal_lion.png",
+		"width": 32,
+		"height": 32
+	},	
+	"resource_herbivore_food":  {
+		"texture_name": "resource_herbivore_food.png",
+		"width": 32,
+		"height": 32
+	},
+	"resource_herbivore_food_a":  {
+		"texture_name": "resource_herbivore_food_a.png",
+		"width": 32,
+		"height": 32
+	},
+	"resource_herbivore_food_b":  {
+		"texture_name": "resource_herbivore_food_b.png",
+		"width": 32,
+		"height": 32
+	},
+	"simulation_background":{
+		"texture_name": "simulation_background.png",
+		"width": 1920,
+		"height": 1080			
+		
+	}
+}
