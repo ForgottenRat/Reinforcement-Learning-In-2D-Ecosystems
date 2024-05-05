@@ -18,7 +18,7 @@
 	},
     "resource_on_death": "scavanger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 0,
+    "starting_number": 20,
 	"reproduction_reward": 100,
 	"living_reward":-1,
 	"gathering_reward": -10,

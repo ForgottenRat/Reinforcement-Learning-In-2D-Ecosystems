@@ -139,34 +139,21 @@ class RLAnimal(Entity):
 
     def initialize_simulation(self, entity_manager):
         self.initialize_animals(self.entity_manager)  # This function loads models for each animal
-        self.simulation_loop(self.entity_manager)  # Start the simulation loop
 
     @classmethod
     def initialize_animals(self, animal, entity_manager):
         # Load configurations
         import simulation.resources
-        deer_config = self.load_animal_config('./data/animals/deer.json')
-        lion_config = self.load_animal_config('./data/animals/lion.json')
-        
-        # Create deer instances
-        for _ in range(deer_config["starting_number"]):
-            deer = RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
-            model_path = f"./data/model/{deer.animal_type}_model.pth"
-            try:
-                deer.load_model(model_path)
-            except FileNotFoundError:
-                print("Deer model not found, initializing with new model.")
-        
-        
-        # Create lion instances
-        for _ in range(lion_config["starting_number"]):
-            lion = RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
-            model_path = f"./data/model/{lion.animal_type}_model.pth"
-            try:
-                lion.load_model(model_path)
-            except FileNotFoundError:
-                print("Lion model not found, initializing with new model.")
-        print("Initialized animals")
+        #model_path_deer = f"./data/model/{deer.animal_type}_model.pth" #TODO: ADD LOADING MODEL
+        #model_path_lion = f"./data/model/{lion.animal_type}_model.pth"
+
+        for _ in range(animal["starting_number"]):
+            animal = RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
+        try:
+            animal.load_model(f"./data/model/{animal.animal_type}_model.pth")
+        except FileNotFoundError:
+                print(f"{animal} model not found, initializing with new model.")
+        self.simulation_loop(entity_manager,10,1800)
 
     def update(self, delta_time):
         super().update(delta_time)
@@ -254,7 +241,7 @@ class RLAnimal(Entity):
 
             targets = []
             for entity in self.entity_manager.entities:
-                if (isinstance(entity, Animal) and id(entity) != id(self) and entity.animal_type == self.animal_type):
+                if (isinstance(entity, RLAnimal) and id(entity) != id(self) and entity.animal_type == self.animal_type):
                     targets.append(entity)
             if not targets:
                 self.update_task(delta_time)
@@ -266,7 +253,7 @@ class RLAnimal(Entity):
                     self.target = targets[0]
 
                 if self.pathfind_until(self.target.position, delta_time, 32):
-                        child = Animal(Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y)),self.entity_manager,self.texture_name,self.animal_type,0,self.max_age,self.max_days_before_reproduction,list(),[self,self,targets[0]],Task.wander,self.resource_requirements,random.choice([self.speed,targets[0].speed]),self.prey,self.resource_on_death,self.resource_count_on_death,self.reproduction_reward,self.living_reward,self.gathering_reward,self.hunting_reward,self.death_by_hunger_reward,self.experimentation_factor,self.experimentation_factor_decay,self.max_hunt_per_day)
+                        child = RLAnimal(Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y)),self.entity_manager,self.texture_name,self.animal_type,0,self.max_age,self.max_days_before_reproduction,list(),[self,self,targets[0]],Task.wander,self.resource_requirements,random.choice([self.speed,targets[0].speed]),self.prey,self.resource_on_death,self.resource_count_on_death,self.reproduction_reward,self.living_reward,self.gathering_reward,self.hunting_reward,self.death_by_hunger_reward,self.experimentation_factor,self.experimentation_factor_decay,self.max_hunt_per_day)
                         if self.children == None:
                             self.children = [child]
 
@@ -298,7 +285,7 @@ class RLAnimal(Entity):
                     if prey_counter > len(prey)-1:
                         break #no valid targets found
                     for entity in self.entity_manager.entities:
-                        if isinstance(entity, Animal):   
+                        if isinstance(entity, RLAnimal):   
                             if entity.animal_type == prey[prey_counter][0]:
                                 targets.append(entity)
                     prey_counter += 1
@@ -333,7 +320,7 @@ class RLAnimal(Entity):
                     self.update_task(delta_time)
                 predators = []
                 for entity in self.entity_manager.entities:
-                    if isinstance(entity, Animal) and entity.target == self:
+                    if isinstance(entity, RLAnimal) and entity.target == self:
                         predators.append(entity)
                 if not predators:
                     self.update_task(delta_time)
@@ -570,20 +557,12 @@ class RLAnimal(Entity):
         loss.backward()
         self.optimizer.step()
 
-    def save_model(self):
-        torch.save(self.model.state_dict(), "./data/model")
+    def save_model(self,x):
+        torch.save(self.model.state_dict(),x)
 
     def load_model(self, model_path):
         self.model.load_state_dict(torch.load(model_path, map_location=device))
    
-    def load_animal_config(file_path):
-        try:
-            with open(file_path, 'r') as file:
-                return json.load(file)
-        except FileNotFoundError:
-            print(f"Error: The file {file_path} was not found.")
-            return {}
-
     def destroy(self):
         if self in self.entity_manager.entities:
             Entity.destroy(self)
@@ -652,13 +631,13 @@ class RLAnimal(Entity):
         else:
             return False
 
-    def simulation_loop(delta_time, entity_manager):
-        try:
-            for entity in entity_manager.entities:
-                if isinstance(entity, RLAnimal):
-                    entity.update(delta_time)
-                    entity.save_model(f"./data/model/{entity.animal_type}_model.pth")
-                    print("Saved model")
-        except Exception:
-            print("Could not save model")
+    def simulation_loop(entity_manager, total_steps, save_interval):
+        while True:
+            for step in range(total_steps):
+                for entity in entity_manager.entities:
+                    entity.update(1/60)  # Assuming a fixed delta_time for simplicity
+                    if step % save_interval == 0 and isinstance(entity, RLAnimal):
+                        entity.save_model(f"./data/model/{entity.animal_type}_model.pth")
+                        print("Model Saved")
+
 
