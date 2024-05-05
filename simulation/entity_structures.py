@@ -408,15 +408,158 @@ class RLAnimal(Entity):
             raise ValueError(f"Unhandled task {self.task}")
 
     def wander(self, delta_time):
-        pass
+        if not type(self.target) is Vector2:
+            self.target = Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y))
+        if self.pathfind_until(self.target,delta_time,32):
+            self.target = Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y))
+        else:
+            self.update_task(delta_time)
+    
     def gather(self, delta_time):
-        pass
+        import simulation.resources
+        #consider which resource is highest priority
+        resource_requirements = sorted(self.resource_requirements.items(),key=lambda x: x[1].priority)
+        targets = list()
+        resource_counter = 0
+        while not targets:
+            if resource_counter > len(resource_requirements)-1:
+                break #no valid targets found
+            for entity in self.entity_manager.entities:
+                if type(entity) is simulation.resources.Resource:   
+                    if entity.name == resource_requirements[resource_counter][0]:
+                        targets.append(entity)
+            resource_counter += 1
+            #this keeps looping until a valid target is found
+        if not targets:
+            self.update_task(delta_time)
+        else:
+            targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
+            if self.target != targets[0] or not type(self.target) is simulation.resources.Resource:
+                self.target = targets[0]
+            if self.pathfind_until(self.target.position,delta_time,32): #TODO: make this texture_size for bounding_box
+                self.resource_count[self.target.name] += self.target.quantity
+                self.target.destroy()
+                self.update_task(delta_time)
+                for i in range(0,len(self.states)):
+                    if self.states[i]:
+                        self.table[i][self.task] += self.gathering_reward
+
     def reproduce(self, delta_time):
-        pass
+        if self.days_before_reproduction > 0:
+            self.update_task(delta_time)
+            return
+        for resource_name,resource_requirement in self.resource_requirements.items():
+            if self.resource_count[resource_name] < resource_requirement.reproductionUsageRate[1]:
+                self.update_task(delta_time)
+                return
+
+
+        targets = list()
+        for entity in self.entity_manager.entities:
+            if type(entity) is RLAnimal and not id(entity) is id(self) and entity.animal_type == self.animal_type:   
+                targets.append(entity)
+        if not targets:
+            self.update_task(delta_time)
+            return
+        else:
+            targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
+            if (self.target != targets[0] and (self.children == None or not self.target in self.children)) or id(self.target) is id( self):
+                self.target = targets[0]
+                
+                
+            if self.pathfind_until(self.target.position,delta_time,32): #TODO: make this texture_size for bounding_box
+
+                child = RLAnimal(Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y)),self.entity_manager,self.texture_name,self.animal_type,0,self.max_age,self.max_days_before_reproduction,list(),[self,self,targets[0]],Task.wander,self.resource_requirements,random.choice([self.speed,targets[0].speed]),self.prey,self.resource_on_death,self.resource_count_on_death,self.reproduction_reward,self.living_reward,self.gathering_reward,self.hunting_reward,self.death_by_hunger_reward,self.experimentation_factor,self.experimentation_factor_decay,self.max_hunt_per_day)
+                if self.children == None:
+                    self.children = [child]
+                else:
+                    self.children.append(child)
+                for resource_name,resource_requirement in self.resource_requirements.items():
+                    usage = random.randint(resource_requirement.reproductionUsageRate[0],resource_requirement.reproductionUsageRate[1])
+                    child.resource_count[resource_name] = usage
+                    self.resource_count[resource_name] -= usage
+
+                self.days_before_reproduction = self.max_days_before_reproduction
+                self.update_task(delta_time)
+                child.update_task(delta_time)
+                child.days_before_reproduction = self.max_days_before_reproduction 
+                for i in range(0,len(self.states)):
+                    if self.states[i]:
+                        self.table[i][self.task] += self.reproduction_reward
+
     def hunt(self, delta_time):
-        pass
+        if self.hunt_per_day >= self.max_hunt_per_day:
+            self.update_task(delta_time)
+            return
+        if self.prey == None:
+            self.task = Task.escape
+            return
+        
+        prey = sorted(self.prey.items(),key=lambda x: x[1])
+        targets = list()
+        prey_counter = 0
+        while not targets:
+            if prey_counter > len(prey)-1:
+                break #no valid targets found
+            for entity in self.entity_manager.entities:
+                if type(entity) is RLAnimal:   
+                    if entity.animal_type == prey[prey_counter][0]:
+                        targets.append(entity)
+            prey_counter += 1
+            #this keeps looping until a valid target is found
+        if not targets:
+            self.update_task(delta_time)
+            pass
+        elif self.hunt_per_day < self.max_hunt_per_day:
+            targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
+            if (self.target != targets[0] and not self.target in self.entity_manager.entities) or self.target == self:
+                self.target = targets[0]
+                self.target.states[State.chased] = False 
+
+            else:
+                self.target.states[State.chased] = True
+                self.target.update_task(delta_time)
+            if self.pathfind_until(self.target.position,delta_time,32) :
+                if self.target.resource_on_death in self.resource_count:
+                    self.resource_count[self.target.resource_on_death] += self.target.resource_count_on_death
+                else:
+                    self.resource_count[self.target.resource_on_death] = self.target.resource_count_on_death
+                self.target.destroy()
+                self.hunt_per_day += 1
+                for i in range(0,len(self.states)):
+                    if self.states[i]:
+                        self.table[i][self.task] += self.hunting_reward
+                self.update_task(delta_time)
+
     def escape(self, delta_time):
-        pass
+        if not self.chased:
+            self.update_task(delta_time)
+        predators = list()
+        for entity in self.entity_manager.entities:
+            if type(entity) is type(RLAnimal) and entity.target == self:
+                predators.append(entity)
+        if not predators:
+            self.update_task(delta_time)
+            return
+        predators = sorted(predators,key=lambda x: x.position.distance_to(self.position))
+        #determine corners
+        centre = Vector2(self.entity_manager.map_size.x /2,  self.entity_manager.map_size.y /2)
+        corners = [Vector2(0,0),Vector2(self.entity_manager.map_size.x,0),Vector2(0,self.entity_manager.map_size.y),Vector2(self.entity_manager.map_size.x,self.entity_manager.map_size.y)]
+        predators_corners = sorted(corners,key=lambda x: x.distance_to(predators[0].position),reverse=True) 
+        final_corner = Vector2(0,0)
+        if predators_corners[0] == corners[0]:
+            final_corner = corners[3]
+            self.target = Vector2(final_corner.x - predators[0].position.x,final_corner.y - predators[0].position.y)
+        elif predators_corners[0] == corners[1]:
+            final_corner = corners[2]
+            self.target = Vector2(final_corner.x + predators[0].position.x,final_corner.y - predators[0].position.y)
+        elif predators_corners[0] == corners[2]:
+            final_corner = corners[1]
+            self.target = Vector2(final_corner.x - predators[0].position.x,final_corner.y + predators[0].position.y)
+        elif predators_corners[0] == corners[3]:
+            final_corner = corners[0]
+            self.target = Vector2(final_corner.x - predators[0].position.x,final_corner.y - predators[0].position.y)
+        self.pathfind_until(self.target,delta_time,32)
 
     def learn_from_action(self, reward):
         self.optimizer.zero_grad()
