@@ -195,7 +195,7 @@ class SimulationView(arcade.View):
                 decoded_animal = json.load(animal)
                 stats.populations[decoded_animal["animal_type"]] = 0
                 stats.populations_per_day[decoded_animal["animal_type"]] = list()
-                entity_structures.Animal.load(decoded_animal,self.entity_manager)
+                entity_structures.RLAnimal.initialize_animals(decoded_animal,self.entity_manager)
         #event manager
         self.event_manager = event_manager.EventManager(self.entity_manager,self.resource_manager,self.clock,MAP_WIDTH,MAP_HEIGHT)
 
@@ -248,7 +248,7 @@ def main():  # MAIN FUNCTION
         title=WINDOW_TITLE,
         antialiasing=False,
         enable_polling=True,
-        fullscreen=False     
+        fullscreen=True     
         )
 
     font_loader(fonts, font_path)

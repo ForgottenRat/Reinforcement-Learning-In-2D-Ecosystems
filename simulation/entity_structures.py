@@ -9,6 +9,7 @@ import arcade
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import json
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #Select gpu for torch
 
@@ -88,14 +89,14 @@ class TaskPredictor(nn.Module):
         self.fc2 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.fc2(out)
-        return out
-
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
+    
 
 @dataclass
-class Animal(Entity):
+class RLAnimal(Entity):
     import simulation.resources
     animal_type: str
     age: int
@@ -119,138 +120,59 @@ class Animal(Entity):
     max_hunt_per_day: int
     def __post_init__(self):
         super().__post_init__()
+        self.input_size = 4  # State size
+        self.hidden_size = 64
+        self.output_size = 5  # Number of tasks
+        self.model = TaskPredictor(self.input_size, self.hidden_size, self.output_size).to(device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
+        self.criterion = nn.CrossEntropyLoss()
+        self.entity_manager.stats.populations[self.animal_type] += 1
         self.resource_count = dict.fromkeys(self.resource_requirements,0)
         self.days_before_reproduction = self.max_days_before_reproduction
-        self.entity_manager.stats.populations[self.animal_type] += 1
         self.target = self
         self.task = Task.wander
         self.age = 0
         self.chased = False
         self.hunt_per_day = 0
-        self.task_predictor = None
         self.states = [False, False, False, False]
         self.table = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
 
-    def destroy(self):
-        if self in self.entity_manager.entities:
-            Entity.destroy(self)
-            self.entity_manager.stats.populations[self.animal_type] -= 1
+    def initialize_simulation(self, entity_manager):
+        self.initialize_animals(entity_manager)  # This function loads models for each animal
+        self.simulation_loop(entity_manager, total_steps=1, save_interval=1)  # Start the simulation loop
 
-    def load(animal, entity_manager):
+    @classmethod
+    def initialize_animals(self, animal, entity_manager):
+        # Load configurations
         import simulation.resources
-
-        for i in range(0, animal["starting_number"]):
-            if "prey" not in animal:
-                animal["prey"] = None
-            if "max_hunt_per_day" not in animal:
-                animal["max_hunt_per_day"] = 0
-            Animal(Vector2(random.randint(0,entity_manager.map_size.x),random.randint(0,entity_manager.map_size.y)),entity_manager,animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
-    
-    def encode_state(self):
-        state_tensor = torch.tensor([int(state) for state in self.states], dtype=torch.float32)
-        return state_tensor.unsqueeze(0)  # Add batch dimension
-
-    def encode_task(self, task):
-        return torch.tensor([task.value], dtype=torch.long)
-
-    def train_task_predictor(self, task_predictor, criterion, optimizer, num_epochs):
-        task_predictor.to("cuda") # Move the model to GPU
-        inputs = [self.encode_state().to("cuda") for i in range(num_epochs)]
-        targets = [self.encode_task(random.choice(list(Task))).to("cuda") for i in range(num_epochs)]
-
-        for epoch in range(num_epochs):
-            optimizer.zero_grad()
-            output = task_predictor(inputs[epoch])
-            loss = criterion(output, targets[epoch])
-            loss.backward()
-            optimizer.step()
-
-    def predict_task(self, task_predictor):
-        with torch.no_grad():
-            state_tensor = self.encode_state().to("cuda")
-            output = task_predictor(state_tensor)
-            i, predicted_task = torch.max(output, 1)
-            return Task(predicted_task.item())
-
-    def update_task(self, delta_time):
-        current_state = -1
-        survival_count = 0
-        reproduction_count = 0
-
-        if self.chased:
-            self.states[State.chased] = True
-        else:
-            self.states[State.chased] = False
-
-        for resource_name, resource_requirement in self.resource_requirements.items():
-            if (
-                resource_requirement.neededForSurvival
-                and self.resource_count[resource_name]
-                < resource_requirement.dailyUsageRate[0]
-            ):
-                survival_count += 1
-            if (
-                resource_requirement.neededForReproduction
-                and self.resource_count[resource_name]
-                < resource_requirement.reproductionUsageRate[1]
-            ):
-                reproduction_count += 1
-
-        if survival_count > 0:
-            self.states[State.low_living_resources] = True
-        else:
-            self.states[State.low_living_resources] = False
-
-        if reproduction_count > 0:
-            self.states[State.low_reproduction_resources] = True
-            self.states[State.high_reproduction_resources] = False
-        else:
-            self.states[State.low_reproduction_resources] = False
-            self.states[State.high_reproduction_resources] = True
+        deer_config = self.load_animal_config('./data/animals/deer.json')
+        lion_config = self.load_animal_config('./data/animals/lion.json')
         
-        if self.states[State.chased]:
-            current_state = State.chased
-        else:
-            true_states = [state for state in self.states if state]
-            current_state = random.choice(true_states)
-
-        # Training the task predictor
-        if self.task_predictor is None:
+        # Create deer instances
+        for _ in range(deer_config["starting_number"]):
+            deer = RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
+            model_path = f"./data/model/{deer.animal_type}_model.pth"
             try:
-                self.task_predictor = TaskPredictor(input_size=len(State), hidden_size=64, output_size=len(Task))
-                self.task_predictor.load_state_dict(torch.load("./data/model/task_predictor_model"))
-                self.task_predictor.to("cuda")
-                criterion = nn.CrossEntropyLoss()
-                optimizer = optim.Adam(self.task_predictor.parameters())
-                self.train_task_predictor(self.task_predictor, criterion, optimizer, num_epochs=100)
-                print("Loaded Training Model")
+                deer.load_model(model_path)
             except FileNotFoundError:
-                print("No saved model parameters found. Creating a new TaskPredictor.")
-                self.task_predictor = TaskPredictor(input_size=len(State), hidden_size=64, output_size=len(Task))
-                self.task_predictor.to("cuda")
-                criterion = nn.CrossEntropyLoss()
-                optimizer = optim.Adam(self.task_predictor.parameters())
-                self.train_task_predictor(self.task_predictor, criterion, optimizer, num_epochs=100)
-        torch.save(self.task_predictor.state_dict(), "./data/model/task_predictor_model")  # TODO: ONLY UPDATE AT END
-
-        # Use the trained task predictor for inference
-        self.task = self.predict_task(self.task_predictor)
-
-        #TODO: REMOVE LOGGING
-        if self.task == 0:
-            print("Wandering", self.animal_type)
-        elif self.task == 1:
-            print("Gathering", self.animal_type)
-        elif self.task == 2:
-            print("Reproducing", self.animal_type)
-        elif self.task == 3:
-            print("Hunting", self.animal_type)
-        else:
-            print("Escaping", self.animal_type, self.task)
+                print("Deer model not found, initializing with new model.")
+        
+        
+        # Create lion instances
+        for _ in range(lion_config["starting_number"]):
+            lion = RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
+            model_path = f"./data/model/{lion.animal_type}_model.pth"
+            try:
+                lion.load_model(model_path)
+            except FileNotFoundError:
+                print("Lion model not found, initializing with new model.")
+        print("Initialized animals")
 
     def update(self, delta_time):
+        self.perform_task(delta_time)
         self.sprite.center_x = self.position.x
         self.sprite.center_y = self.position.y
+
         if self.entity_manager.clock.new_day and self.entity_manager.clock.day_counter >1:
             self.hunt_per_day = 0
             self.update_task(delta_time)
@@ -288,6 +210,7 @@ class Animal(Entity):
                 self.target = Vector2(random.randint(0, self.entity_manager.map_size.x), random.randint(0, self.entity_manager.map_size.y),)
             else:
                 self.update_task(delta_time)
+
         elif self.task == Task.gather:
             resource_requirements = sorted(
                 self.resource_requirements.items(), key=lambda x: x[1].priority)
@@ -403,64 +326,164 @@ class Animal(Entity):
                         if self.states[i]:
                             self.table[i][self.task] += self.hunting_reward
                             self.update_task(delta_time)
+
+            elif self.task == Task.escape:
+                if not self.chased:
+                    self.update_task(delta_time)
+                predators = []
+                for entity in self.entity_manager.entities:
+                    if isinstance(entity, Animal) and entity.target == self:
+                        predators.append(entity)
+                if not predators:
+                    self.update_task(delta_time)
+                    return
+                predators = sorted(
+                    predators, key=lambda x: x.position.distance_to(self.position)
+                )
+                # determine corners
+                centre = Vector2(
+                    self.entity_manager.map_size.x / 2,
+                    self.entity_manager.map_size.y / 2,
+                )
+                corners = [
+                    Vector2(0, 0),
+                    Vector2(self.entity_manager.map_size.x, 0),
+                    Vector2(0, self.entity_manager.map_size.y),
+                    Vector2(
+                        self.entity_manager.map_size.x,
+                        self.entity_manager.map_size.y,
+                    ),
+                ]
+                predators_corners = sorted(
+                    corners,
+                    key=lambda x: x.distance_to(predators[0].position),
+                    reverse=True,
+                )
+                final_corner = Vector2(0, 0)
+                if predators_corners[0] == corners[0]:
+                    final_corner = corners[3]
+                    self.target = Vector2(
+                        final_corner.x - predators[0].position.x,
+                        final_corner.y - predators[0].position.y,
+                    )
+                elif predators_corners[0] == corners[1]:
+                    final_corner = corners[2]
+                    self.target = Vector2(
+                        final_corner.x + predators[0].position.x,
+                        final_corner.y - predators[0].position.y,
+                    )
+                elif predators_corners[0] == corners[2]:
+                    final_corner = corners[1]
+                    self.target = Vector2(
+                        final_corner.x - predators[0].position.x,
+                        final_corner.y + predators[0].position.y,
+                    )
+                elif predators_corners[0] == corners[3]:
+                    final_corner = corners[0]
+                    self.target = Vector2(
+                        final_corner.x - predators[0].position.x,
+                        final_corner.y - predators[0].position.y,
+                    )
+                self.pathfind_until(self.target, delta_time, 32)
+
+    def perform_task(self, delta_time):
+        state_vector = torch.tensor([self.states], dtype=torch.float).to(device)
+        task_probabilities = self.model(state_vector)
+        self.task = Task(task_probabilities.argmax().item())
+        self.apply_task(delta_time)  
+
+    def apply_task(self, delta_time):
+        print(self.task)
+        if self.task == Task.wander:
+            self.wander(delta_time)
+        elif self.task == Task.gather:
+            self.gather(delta_time)
+        elif self.task == Task.reproduce:
+            self.reproduce(delta_time)
+        elif self.task == Task.hunt:
+            self.hunt(delta_time)
         elif self.task == Task.escape:
-            if not self.chased:
-                self.update_task(delta_time)
-            predators = []
-            for entity in self.entity_manager.entities:
-                if isinstance(entity, Animal) and entity.target == self:
-                    predators.append(entity)
-            if not predators:
-                self.update_task(delta_time)
-                return
-            predators = sorted(
-                predators, key=lambda x: x.position.distance_to(self.position)
-            )
-            # determine corners
-            centre = Vector2(
-                self.entity_manager.map_size.x / 2,
-                self.entity_manager.map_size.y / 2,
-            )
-            corners = [
-                Vector2(0, 0),
-                Vector2(self.entity_manager.map_size.x, 0),
-                Vector2(0, self.entity_manager.map_size.y),
-                Vector2(
-                    self.entity_manager.map_size.x,
-                    self.entity_manager.map_size.y,
-                ),
-            ]
-            predators_corners = sorted(
-                corners,
-                key=lambda x: x.distance_to(predators[0].position),
-                reverse=True,
-            )
-            final_corner = Vector2(0, 0)
-            if predators_corners[0] == corners[0]:
-                final_corner = corners[3]
-                self.target = Vector2(
-                    final_corner.x - predators[0].position.x,
-                    final_corner.y - predators[0].position.y,
-                )
-            elif predators_corners[0] == corners[1]:
-                final_corner = corners[2]
-                self.target = Vector2(
-                    final_corner.x + predators[0].position.x,
-                    final_corner.y - predators[0].position.y,
-                )
-            elif predators_corners[0] == corners[2]:
-                final_corner = corners[1]
-                self.target = Vector2(
-                    final_corner.x - predators[0].position.x,
-                    final_corner.y + predators[0].position.y,
-                )
-            elif predators_corners[0] == corners[3]:
-                final_corner = corners[0]
-                self.target = Vector2(
-                    final_corner.x - predators[0].position.x,
-                    final_corner.y - predators[0].position.y,
-                )
-            self.pathfind_until(self.target, delta_time, 32)
+            self.escape(delta_time)
+        else:
+            raise ValueError(f"Unhandled task {self.task}")
+
+    def wander(self, delta_time):
+        pass
+    def gather(self, delta_time):
+        pass
+    def reproduce(self, delta_time):
+        pass
+    def hunt(self, delta_time):
+        pass
+    def escape(self, delta_time):
+        pass
+
+    def learn_from_action(self, reward):
+        self.optimizer.zero_grad()
+        predicted_task_probabilities = self.model(torch.tensor([self.states], dtype=torch.float).to(device))
+        loss = self.criterion(predicted_task_probabilities, torch.tensor([self.task], dtype=torch.long).to(device))
+        loss.backward()
+        self.optimizer.step()
+
+    def save_model(self):
+        torch.save(self.model.state_dict(), "./data/model")
+
+    def load_model(self, model_path):
+        self.model.load_state_dict(torch.load(model_path, map_location=device))
+   
+    def load_animal_config(file_path):
+        try:
+            with open(file_path, 'r') as file:
+                return json.load(file)
+        except FileNotFoundError:
+            print(f"Error: The file {file_path} was not found.")
+            return {}
+
+    def destroy(self):
+        if self in self.entity_manager.entities:
+            Entity.destroy(self)
+            self.entity_manager.stats.populations[self.animal_type] -= 1
+
+    def update_task(self, delta_time):
+        current_state = -1
+        survival_count = 0
+        reproduction_count = 0
+
+        if self.chased:
+            self.states[State.chased] = True
+        else:
+            self.states[State.chased] = False
+
+        for resource_name, resource_requirement in self.resource_requirements.items():
+            if (
+                resource_requirement.neededForSurvival
+                and self.resource_count[resource_name]
+                < resource_requirement.dailyUsageRate[0]
+            ):
+                survival_count += 1
+            if (
+                resource_requirement.neededForReproduction
+                and self.resource_count[resource_name]
+                < resource_requirement.reproductionUsageRate[1]):
+                reproduction_count += 1
+
+        if survival_count > 0:
+            self.states[State.low_living_resources] = True
+        else:
+            self.states[State.low_living_resources] = False
+
+        if reproduction_count > 0:
+            self.states[State.low_reproduction_resources] = True
+            self.states[State.high_reproduction_resources] = False
+        else:
+            self.states[State.low_reproduction_resources] = False
+            self.states[State.high_reproduction_resources] = True
+        
+        if self.states[State.chased]:
+            current_state = State.chased
+        else:
+            true_states = [state for state in self.states if state]
+            current_state = random.choice(true_states)
 
     def pathfind_to(self, goal, delta_time):
         snapped_goal = Vector2(
@@ -484,3 +507,15 @@ class Animal(Entity):
             return True
         else:
             return False
+
+    def simulation_loop(delta_time, entity_manager, total_steps, save_interval):
+        try:
+            for step in range(total_steps):
+                for entity in entity_manager.entities:
+                    if isinstance(entity, RLAnimal):
+                        entity.update(delta_time)  
+                        if step % save_interval == 0:
+                            entity.save_model(f"./model_states/{entity.animal_type}_model.pth")
+                            print("Saved model")
+        except Exception:
+            print("Could not save model")

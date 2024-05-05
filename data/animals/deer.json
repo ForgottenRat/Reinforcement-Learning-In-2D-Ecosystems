@@ -13,15 +13,20 @@
 		}
 		
 	},
+	
 	"base_speed": [85,150],
+	"prey":{
+		"None" : 0
+	},
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
     "starting_number": 1,
 	"reproduction_reward": 100,
 	"living_reward":0,
 	"gathering_reward": 5000,
-	"hunting_reward": -50,
+	"hunting_reward": 100,
 	"death_by_hunger_reward": -10,
 	"experimentation_factor": 60,
-	"experimentation_factor_decay": 0
+	"experimentation_factor_decay": 0,
+	"max_hunt_per_day": 0
 }
