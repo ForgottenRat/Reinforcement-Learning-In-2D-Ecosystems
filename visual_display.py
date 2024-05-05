@@ -6,6 +6,7 @@ import arcade
 import random
 import os
 from arcade.gui import *
+import time
 
 
 with open("./data/settings.json") as settings_json: # Loading JSON settings file
