@@ -169,6 +169,7 @@ class RLAnimal(Entity):
         print("Initialized animals")
 
     def update(self, delta_time):
+        super().update(delta_time)
         self.perform_task(delta_time)
         self.sprite.center_x = self.position.x
         self.sprite.center_y = self.position.y
@@ -390,10 +391,11 @@ class RLAnimal(Entity):
         state_vector = torch.tensor([self.states], dtype=torch.float).to(device)
         task_probabilities = self.model(state_vector)
         self.task = Task(task_probabilities.argmax().item())
+        print(self.task, self.animal_type)
         self.apply_task(delta_time)  
 
     def apply_task(self, delta_time):
-        print(self.task)
+        self.task = Task.wander
         if self.task == Task.wander:
             self.wander(delta_time)
         elif self.task == Task.gather:
@@ -591,7 +593,6 @@ class RLAnimal(Entity):
         current_state = -1
         survival_count = 0
         reproduction_count = 0
-
         if self.chased:
             self.states[State.chased] = True
         else:
@@ -627,6 +628,7 @@ class RLAnimal(Entity):
         else:
             true_states = [state for state in self.states if state]
             current_state = random.choice(true_states)
+        
 
     def pathfind_to(self, goal, delta_time):
         snapped_goal = Vector2(
