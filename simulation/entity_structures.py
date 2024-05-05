@@ -138,8 +138,8 @@ class RLAnimal(Entity):
         self.table = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
 
     def initialize_simulation(self, entity_manager):
-        self.initialize_animals(entity_manager)  # This function loads models for each animal
-        self.simulation_loop(entity_manager, total_steps=1, save_interval=1)  # Start the simulation loop
+        self.initialize_animals(self.entity_manager)  # This function loads models for each animal
+        self.simulation_loop(self.entity_manager)  # Start the simulation loop
 
     @classmethod
     def initialize_animals(self, animal, entity_manager):
@@ -391,8 +391,8 @@ class RLAnimal(Entity):
         state_vector = torch.tensor([self.states], dtype=torch.float).to(device)
         task_probabilities = self.model(state_vector)
         self.task = Task(task_probabilities.argmax().item())
-        print(self.task, self.animal_type)
-        self.apply_task(delta_time)  
+        #print(self.task, self.animal_type)
+        self.apply_task(delta_time)
 
     def apply_task(self, delta_time):
         self.task = Task.wander
@@ -628,7 +628,6 @@ class RLAnimal(Entity):
         else:
             true_states = [state for state in self.states if state]
             current_state = random.choice(true_states)
-        
 
     def pathfind_to(self, goal, delta_time):
         snapped_goal = Vector2(
@@ -653,14 +652,13 @@ class RLAnimal(Entity):
         else:
             return False
 
-    def simulation_loop(delta_time, entity_manager, total_steps, save_interval):
+    def simulation_loop(delta_time, entity_manager):
         try:
-            for step in range(total_steps):
-                for entity in entity_manager.entities:
-                    if isinstance(entity, RLAnimal):
-                        entity.update(delta_time)  
-                        if step % save_interval == 0:
-                            entity.save_model(f"./model_states/{entity.animal_type}_model.pth")
-                            print("Saved model")
+            for entity in entity_manager.entities:
+                if isinstance(entity, RLAnimal):
+                    entity.update(delta_time)
+                    entity.save_model(f"./data/model/{entity.animal_type}_model.pth")
+                    print("Saved model")
         except Exception:
             print("Could not save model")
+

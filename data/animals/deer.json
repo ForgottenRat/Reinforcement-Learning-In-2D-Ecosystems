@@ -20,7 +20,7 @@
 	},
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
-    "starting_number": 1,
+    "starting_number": 15,
 	"reproduction_reward": 100,
 	"living_reward":0,
 	"gathering_reward": 5000,
