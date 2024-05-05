@@ -1,4 +1,4 @@
-**ML Project**
-A fully python project that aims to simulate a environment where animals try to survive and coexist. 
+**Reinforcement-Learning-In-2D-Ecosystems**
+Improvement of MLProject
 
-By: ForgottenRat, Ausern Error
+By: ForgottenRat
