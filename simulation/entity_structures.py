@@ -13,6 +13,15 @@ import json
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #Select gpu for torch
 
+""" 
+USE ENERGY 0-100 percent
+Energy for hunting, each hunt(minus a bit of energy) state long distnace, short distance 
+Energy for escaping
+ADD HIDING FOR ALTERNATIVE CHOICE TO ESCAPING, HIDING LAST ONE DAY AND IT HIDES ON THE FOOD
+REPRODUCING USES ENERGY
+WANDERING USES ENERGY
+DEER CAN LAST ARONUND 3 D AND LIONS ABT 10-7 D
+ """
 
 @dataclass
 class Vector2:
@@ -26,18 +35,19 @@ class Vector2:
     
 
 class State(IntEnum):
-    low_living_resources = 0,
-    chased = 1,
-    low_reproduction_resources = 2,
-    high_reproduction_resources = 3
+    living_resources = 0,
+    chased = 0,
+    reproduction_resources = 0
+    hunt_distance = 0
 
 
 class Task(IntEnum):
     wander = 0
-    gather = 1
-    reproduce = 2
-    hunt = 3
-    escape = 4
+    gather = 0
+    reproduce = 0
+    hunt = 0
+    escape = 0
+    hiding = 0
 
 
 class EntityType(Enum):
@@ -125,7 +135,7 @@ class RLAnimal(Entity):
         self.output_size = 5  # Number of tasks
         self.model = TaskPredictor(self.input_size, self.hidden_size, self.output_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss()
         self.entity_manager.stats.populations[self.animal_type] += 1
         self.resource_count = dict.fromkeys(self.resource_requirements,0)
         self.days_before_reproduction = self.max_days_before_reproduction
@@ -136,6 +146,7 @@ class RLAnimal(Entity):
         self.hunt_per_day = 0
         self.states = [False, False, False, False]
         self.table = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+        self.model
 
     def initialize_simulation(self, entity_manager):
         self.initialize_animals(self.entity_manager)  # This function loads models for each animal
@@ -144,13 +155,14 @@ class RLAnimal(Entity):
     def initialize_animals(self, animal, entity_manager):
         # Load configurations
         import simulation.resources
-        #model_path_deer = f"./data/model/{deer.animal_type}_model.pth" #TODO: ADD LOADING MODEL
-        #model_path_lion = f"./data/model/{lion.animal_type}_model.pth"
+        model_path_deer = f"./data/model/Deer_model.pth" 
+        model_path_lion = f"./data/model/Lion_model.pth"
 
         for _ in range(animal["starting_number"]):
-            animal = RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
+            RLAnimal(Vector2(random.randint(0, entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)), entity_manager, animal["texture"],animal["animal_type"],0,animal["max_age"],animal["max_days_before_reproduction"],None,None,Task.wander,simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),random.randint(animal["base_speed"][0],animal["base_speed"][1]),animal["prey"],animal["resource_on_death"],animal["resource_count_on_death"],animal["reproduction_reward"],animal["living_reward"],animal["gathering_reward"],animal["hunting_reward"],animal["death_by_hunger_reward"],animal["experimentation_factor"],animal["experimentation_factor_decay"],animal["max_hunt_per_day"])
         try:
-            animal.load_model(f"./data/model/{animal.animal_type}_model.pth")
+            model_deer = self.load_model(self,model_path_deer)
+            model_lion = self.load_model(self,model_path_lion)
         except FileNotFoundError:
                 print(f"{animal} model not found, initializing with new model.")
         self.simulation_loop(entity_manager,10,1800)
@@ -556,12 +568,6 @@ class RLAnimal(Entity):
         loss = self.criterion(predicted_task_probabilities, torch.tensor([self.task], dtype=torch.long).to(device))
         loss.backward()
         self.optimizer.step()
-
-    def save_model(self,x):
-        torch.save(self.model.state_dict(),x)
-
-    def load_model(self, model_path):
-        self.model.load_state_dict(torch.load(model_path, map_location=device))
    
     def destroy(self):
         if self in self.entity_manager.entities:
@@ -630,6 +636,15 @@ class RLAnimal(Entity):
             return True
         else:
             return False
+        
+    def save_model(self,x):
+        torch.save(self.model.state_dict(),x)
+
+    def load_model(self, model_path):
+        model = TaskPredictor(self.input_size,self.hidden_size,self.output_size)
+        state_dict = torch.load(model_path)
+        return model.load_state_dict(state_dict)
+        
 
     def simulation_loop(entity_manager, total_steps, save_interval):
         while True:
