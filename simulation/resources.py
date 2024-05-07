@@ -25,14 +25,14 @@ class AnimalResourceRequirements:
     neededForSurvival: bool
     neededForReproduction: bool
     priority: int #animals who have multiple requirements will go to the closest resource with the highest priority
-    dailyUsageRate: list # rate is randomly chosen from list, TODO: Investigate weighting this
-    reproductionUsageRate: list
+    DailyEnergyUsageRate: float
+    ReproductionEnergyUsage: float
     def decode_dict(dictionary):
         final_dictionary = dict()
         for key, value in dictionary.items():
             final_dictionary[key] = AnimalResourceRequirements.decode(value)
         return final_dictionary
     def decode(dictionary):
-        return AnimalResourceRequirements(dictionary["neededForSurvival"],dictionary["neededForReproduction"],dictionary["priority"],dictionary["dailyUsageRate"],dictionary["reproductionUsageRate"])
+        return AnimalResourceRequirements(dictionary["neededForSurvival"],dictionary["neededForReproduction"],dictionary["priority"],dictionary["DailyEnergyUsageRate"],dictionary["ReproductionEnergyUsage"])
 
         
