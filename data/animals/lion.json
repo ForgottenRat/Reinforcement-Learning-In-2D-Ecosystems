@@ -7,8 +7,8 @@
 			"neededForSurvival": true,
 			"neededForReproduction": true,
 			"priority": 0,
-			"DailyEnergyUsageRate": [1,1],
-			"ReproductionEnergyUsage": [1,1]
+			"DailyEnergyUsageRate": 0.125,
+			"ReproductionEnergyUsage": 0.20
 		}
 	},
 	"base_speed": [70,100],

@@ -138,11 +138,10 @@ class RLAnimal(Entity):
         self.entity_manager.stats.populations[self.animal_type] += 1
         self.resource_count = dict.fromkeys(self.resource_requirements,0)
         self.target = self
-        self.task = None
+        self.task = Task.wander
         self.age = 0
-        self.chased = False
-        self.states = [0, 0, 0, 0]
-        self.living_energy = float(1)
+        self.states = [float(1), int(1), int(0), int(0)]
+
 
     def initialize_simulation(self, entity_manager):
         self.initialize_animals(self.entity_manager)  # This function loads models for each animal
@@ -166,15 +165,15 @@ class RLAnimal(Entity):
                     task = Task.wander,
                     resource_requirements = simulation.resources.AnimalResourceRequirements.decode_dict(animal["resource_requirements"]),
                     speed = random.randint(animal["base_speed"][0],animal["base_speed"][1]),
-                    prey = animal["prey"]
+                    prey = animal["prey"],
                     resource_on_death = animal["resource_on_death"],
-                    resource_count_on_death = animal["resource_count_on_death"]
-                    reproduction_reward = animal["reproduction_reward"]
-                    living_reward = animal["living_reward"]
-                    gathering_reward = animal["gathering_reward"]
-                    hunting_reward = animal["hunting_reward"]
+                    resource_count_on_death = animal["resource_count_on_death"],
+                    reproduction_reward = animal["reproduction_reward"],
+                    living_reward = animal["living_reward"],
+                    gathering_reward = animal["gathering_reward"],
+                    hunting_reward = animal["hunting_reward"],
                     death_by_hunger_reward = animal["death_by_hunger_reward"]
-                )
+            )
 
         try:
             model_deer = self.load_model(self,model_path_deer)
@@ -190,6 +189,12 @@ class RLAnimal(Entity):
         else:
             self.states[State.chased] = int(0)
 
+        for resource_name, resource_requirement in self.resource_requirements.items():
+            if self.states[State.living_energy] < resource_requirement.ReproductionEnergyUsage:
+                self.states[State.reproduction_energy] = int(0)
+            else:
+                self.states[State.reproduction_energy] = int(1)
+
     def update(self, delta_time):
         self.sprite.center_x = self.position.x
         self.sprite.center_y = self.position.y
@@ -200,16 +205,12 @@ class RLAnimal(Entity):
                 self.destroy()
 
             for resource_name, resource_requirement in self.resource_requirements.items():
-                if self.living_energy > 0:
-                    self.living_energy -= resource_requirement.DailyEnergyUsageRate
+                if self.states[State.living_energy] > 0:
+                    self.states[State.living_energy] -= resource_requirement.DailyEnergyUsageRate
                     self.age +=1
                 else:
                     self.death_by_hunger_reward
                     self.destroy()
-        
-
-            
-                
         
         self.perform_task(self, delta_time)
 
@@ -275,11 +276,8 @@ class RLAnimal(Entity):
                         self.table[i][self.task] += self.gathering_reward
 
     def reproduce(self, delta_time):
-        if self.days_before_reproduction > 0:
-            self.update_task(delta_time)
-            return
         for resource_name,resource_requirement in self.resource_requirements.items():
-            if self.resource_count[resource_name] < resource_requirement.reproductionUsageRate[1]:
+            if self.resource_count[resource_name] < resource_requirement.ReproductionEnergyUsage:
                 self.update_task(delta_time)
                 return
 
@@ -305,14 +303,13 @@ class RLAnimal(Entity):
                 else:
                     self.children.append(child)
                 for resource_name,resource_requirement in self.resource_requirements.items():
-                    usage = random.randint(resource_requirement.reproductionUsageRate[0],resource_requirement.reproductionUsageRate[1])
+                    usage = resource_requirement.ReproductionEnergyUsage
                     child.resource_count[resource_name] = usage
                     self.resource_count[resource_name] -= usage
 
-                self.days_before_reproduction = self.max_days_before_reproduction
                 self.update_task(delta_time)
                 child.update_task(delta_time)
-                child.days_before_reproduction = self.max_days_before_reproduction 
+
                 for i in range(0,len(self.states)):
                     if self.states[i]:
                         self.table[i][self.task] += self.reproduction_reward
