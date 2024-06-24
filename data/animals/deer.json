@@ -1,7 +1,7 @@
 {
 	"animal_type": "Deer",
 	"texture": "animal_deer",
-    "max_age": 40,
+    "max_age": 20,
 	"resource_requirements": {
 		"herbivore_food": {
 			"neededForSurvival": true,
@@ -19,7 +19,7 @@
 	},
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
-    "starting_number": 15,
+    "starting_number": 2,
 	"reproduction_reward": 100,
 	"living_reward":0,
 	"gathering_reward": 5000,
