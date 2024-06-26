@@ -249,11 +249,6 @@ class RLAnimal(Entity):
 
 
     def perform_task(self, delta_time):
-        self.task = int(5)
-        if self.animal_type == "Lion":
-            self.task = 3
-        
-        
         if self.task == 0:
             self.wander(delta_time)
         elif self.task == 1:
@@ -267,12 +262,13 @@ class RLAnimal(Entity):
         elif self.task == 5:
             self.hide(delta_time)
         else:
-            raise ValueError(f"Unhandled task {self.task}")
+            print(self.task, "Task not found")
+            self.wander(delta_time)
 
     def wander(self, delta_time):
         wander_energy_cost = 0.02
-
-        if self.target is None or random.random() < 0.02:  # 2% chance to pick a new target each update
+        
+        if self.target is None or not isinstance(self.target, Vector2) or random.random() < 0.02:  # 2% chance to pick a new target each update
             self.target = Vector2(random.randint(0, self.entity_manager.map_size.x),
                                 random.randint(0, self.entity_manager.map_size.y))
 
@@ -326,61 +322,91 @@ class RLAnimal(Entity):
                 self.target.destroy()
                 
     def reproduce(self, delta_time):
-        for resource_name,resource_requirement in self.resource_requirements.items():
-            if self.resource_count[resource_name] < resource_requirement.ReproductionEnergyUsage:
+        import simulation.resources
+
+        # Check if the animal has enough energy to reproduce
+        for resource_name, resource_requirement in self.resource_requirements.items():
+            if self.states[0] < resource_requirement.ReproductionEnergyUsage:
                 return
 
+        # Select potential mates
+        potential_mates = [entity for entity in self.entity_manager.entities 
+                        if isinstance(entity, RLAnimal) 
+                        and entity.animal_type == self.animal_type 
+                        and entity is not self 
+                        and entity.states[1] == 1
+                        and entity.age > 3]  # Ensure the mate is also ready to reproduce
 
-        targets = list()
-        for entity in self.entity_manager.entities:
-            if type(entity) is RLAnimal and not id(entity) is id(self) and entity.animal_type == self.animal_type:   
-                targets.append(entity)
-        if not targets:
+        if not potential_mates:
             return
-        else:
-            targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
-            if (self.target != targets[0] and (self.children == None or not self.target in self.children)) or id(self.target) is id( self):
-                self.target = targets[0]
-                
-                
-            if self.pathfind_until(self.target.position,delta_time,32): #TODO: make this texture_size for bounding_box
 
-                child = RLAnimal(Vector2(random.randint(0,self.entity_manager.map_size.x), random.randint(0, self.entity_manager.map_size.y)),
-                    entity_manager = self.entity_manager,
-                    texture_name = self.texture_name,
-                    animal_type = self.animal_type,
-                    age = int(0),
-                    max_age = self.max_age,
-                    children = list(),
-                    parents = [self,self,targets[0]],
-                    task = self.wander(delta_time),
-                    resource_requirements = self.resource_requirements,
-                    speed = random.choice([self.speed,targets[0].speed]),
-                    prey = self.prey,
-                    resource_on_death = self.resource_on_death,
-                    resource_count_on_death = self.resource_count_on_death,
-                    reproduction_reward = self.reproduction_reward,
-                    living_reward = self.living_reward,
-                    gathering_reward = self.gathering_reward,
-                    hunting_reward = self.hunting_reward,
-                    death_by_hunger_reward = self.death_by_hunger_reward
+        # Sort mates by proximity and select the closest
+        potential_mates.sort(key=lambda x: x.position.distance_to(self.position))
+        mate = potential_mates[0]
+
+        # Move towards the mate
+        if not self.pathfind_until(mate.position, delta_time, 55):
+            return
+
+        # Create a child if within range
+        if self.position.distance_to(mate.position) <= 32:
+            child_position = Vector2(
+                random.randint(0, self.entity_manager.map_size.x), 
+                random.randint(0, self.entity_manager.map_size.y)
             )
-                
-                if self.children == None:
-                    self.children = [child]
-                else:
-                    self.children.append(child)
-                for resource_name,resource_requirement in self.resource_requirements.items():
-                    usage = resource_requirement.ReproductionEnergyUsage
-                    child.resource_count[resource_name] = usage
-                    self.resource_count[resource_name] -= usage
+            
+            # Inherit attributes with some variability
+            child_speed = random.choice([self.speed, mate.speed]) + random.uniform(-0.1, 0.1)
+            child_energy = 0.2  # Start with full energy
+            
+            child = RLAnimal(
+                position=child_position,
+                entity_manager=self.entity_manager,
+                texture_name=self.texture_name,
+                animal_type=self.animal_type,
+                age=int(0),
+                max_age=self.max_age,
+                children=[],
+                parents=[self, mate],
+                task=None,
+                resource_requirements=self.resource_requirements,
+                speed=child_speed,
+                prey=self.prey,
+                resource_on_death=self.resource_on_death,
+                resource_count_on_death=self.resource_count_on_death,
+                reproduction_reward=self.reproduction_reward,
+                living_reward=self.living_reward,
+                gathering_reward=self.gathering_reward,
+                hunting_reward=self.hunting_reward,
+                death_by_hunger_reward=self.death_by_hunger_reward
+            )
+            
+            if self.children is None:
+                self.children = [child]
+            else:
+                self.children.append(child)
 
-                self.wander(delta_time)
-                child.wander(delta_time)
+            for resource_name, resource_requirement in self.resource_requirements.items():
+                usage = resource_requirement.ReproductionEnergyUsage
+                child.states[0] = child_energy
+                self.states[0] -= usage
+                mate.states[0] -= usage  # Both parents lose energy
+            
+            # Assign initial task to the child and parents
+            child.task = 0  # Wander task for the child
+            self.task = 0  # Wander task for the parent
+            mate.task = 0  # Wander task for the mate
+            
+            # Perform tasks immediately
+            child.perform_task(delta_time)
+            self.perform_task(delta_time)
+            mate.perform_task(delta_time)
+            
+            print(f"Reproduced: {self.animal_type} at {self.position} with mate at {mate.position}. Child at {child.position}")
 
-                for i in range(0,len(self.states)):
-                    if self.states[i]:
-                        self.table[i][self.task] += self.reproduction_reward
+                # for i in range(0,len(self.states)):
+                #     if self.states[i]:
+                #         self.table[i][self.task] += self.reproduction_reward
 
     def hunt(self, delta_time):
         hiding_energy_loss = 0.01
@@ -506,7 +532,6 @@ class RLAnimal(Entity):
                     self.target.destroy()
                     self.hide_timer_main = 0
         
-
     def learn_from_action(self, reward):
         self.optimizer.zero_grad()
         predicted_task_probabilities = self.model(torch.tensor([self.states], dtype=torch.float).to(device))
