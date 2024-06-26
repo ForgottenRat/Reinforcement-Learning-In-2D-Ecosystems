@@ -9,12 +9,17 @@ class EventManager():
     area_width: int
     area_height: int
     def update(self,delta_time):
-        if self.clock.new_day:        
-            for entity in self.entity_manager.entities:
-                if entity.entity_type == entity_structures.EntityType.resource:
-                    entity.destroy()
-                    pass
+        day_count = self.entity_manager.clock.day_counter
+        if day_count < 1:
             for resource_name, resource in self.resource_manager.resources.items():  #TODO: add config option for this
                 if random.randint(0,100) <= resource[self.resource_manager.SPAWNCHANCE]:
                     for i in range(0,resource[self.resource_manager.SPAWNAMOUNT]):
-                        resources.Resource(entity_structures.Vector2(random.randint(1,self.area_width),random.randint(0,self.area_height)),self.entity_manager,random.choice(resource[self.resource_manager.TEXTURES]),resource_name,resource[self.resource_manager.QUANTITY])
+                        resources.Resource(entity_structures.Vector2(random.randint(1,self.area_width),random.randint(0,self.area_height)),
+                                           self.entity_manager,random.choice(resource[self.resource_manager.TEXTURES]),resource_name,resource[self.resource_manager.QUANTITY])
+
+        elif self.clock.new_day:        
+            for resource_name, resource in self.resource_manager.resources.items():  #TODO: add config option for this
+                if random.randint(0,100) <= resource[self.resource_manager.SPAWNCHANCE]:
+                    for i in range(0,resource[self.resource_manager.SPAWNAMOUNT]):
+                        resources.Resource(entity_structures.Vector2(random.randint(1,self.area_width),random.randint(0,self.area_height)),
+                                           self.entity_manager,random.choice(resource[self.resource_manager.TEXTURES]),resource_name,resource[self.resource_manager.QUANTITY])

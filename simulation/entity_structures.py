@@ -47,6 +47,7 @@ class EntityManager():
     clock: simulation.clock.Clock
     stats: simulation.output.Stats
     textures: list
+    
 
     def __post_init__(self):
         self.sprite_list = arcade.SpriteList(True)
@@ -67,7 +68,7 @@ class Entity:
     def __post_init__(self):
         self.entity_manager.entities.append(self)
         self.entity_type = EntityType.none        
-        self.sprite = arcade.Sprite(self.entity_manager.textures[self.texture_name],1,self.position.x,self.position.y)
+        self.sprite = arcade.Sprite(self.entity_manager.textures[self.texture_name],1.35,self.position.x,self.position.y)
         self.entity_manager.sprite_list.append(self.sprite)
 
     def destroy(self):
@@ -137,7 +138,8 @@ class RLAnimal(Entity):
         self.task = [int(0), int(0), int(0), int(0),int(0), int(0)]
         #States: living energy, repruction energy, chased, hunt_distance
         self.states = [float(1), int(0), int(0), int(0)]
-        
+        self.hide_timer_main = 4
+        self.hiding = False
 
     @classmethod
     def initialize_animals(self, animal, entity_manager):
@@ -194,6 +196,10 @@ class RLAnimal(Entity):
     def animal_update(self, delta_time):
         
         for resource_name, resource_requirement in self.resource_requirements.items():
+            
+            if self.states[0] > 1:
+                self.states[0] = 1
+            
             if self.states[0] > 0:
                 self.states[0] -= resource_requirement.DailyEnergyUsageRate
                 self.age +=1
@@ -212,14 +218,14 @@ class RLAnimal(Entity):
                 self.destroy()
                 return
             
-            if self.animal_type == "Deer":
-                self.states[2] = 0  # Reset chased state
+            if self.animal_type == "Deer" and self.states[2] == 1:
                 for entity in self.entity_manager.entities:
                     if isinstance(entity, RLAnimal) and entity.target == self:
-                        if random.random() < 0.9:
-                            self.states[2] = 1  
+                        if random.random() > 0.8:
+                            self.states[2] = int(1)  
                             break
                         else:
+                            self.states[2] = int(0)
                             return
                         
             
@@ -243,7 +249,7 @@ class RLAnimal(Entity):
 
 
     def perform_task(self, delta_time):
-        self.task = int(0)
+        self.task = int(5)
         if self.animal_type == "Lion":
             self.task = 3
         
@@ -264,7 +270,8 @@ class RLAnimal(Entity):
             raise ValueError(f"Unhandled task {self.task}")
 
     def wander(self, delta_time):
-        
+        wander_energy_cost = 0.02
+
         if self.target is None or random.random() < 0.02:  # 2% chance to pick a new target each update
             self.target = Vector2(random.randint(0, self.entity_manager.map_size.x),
                                 random.randint(0, self.entity_manager.map_size.y))
@@ -289,8 +296,11 @@ class RLAnimal(Entity):
 
         self.position.x += direction.x * self.speed * delta_time
         self.position.y += direction.y * self.speed * delta_time
+        self.states[0] -= wander_energy_cost * delta_time
         
     def gather(self, delta_time):
+        gather_energy_gain = 0.2
+        
         import simulation.resources
         #consider which resource is highest priority
         resource_requirements = sorted(self.resource_requirements.items(),key=lambda x: x[1].priority)
@@ -311,13 +321,10 @@ class RLAnimal(Entity):
             targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
             if self.target != targets[0] or not type(self.target) is simulation.resources.Resource:
                 self.target = targets[0]
-            if self.pathfind_until(self.target.position,delta_time,32): #TODO: make this texture_size for bounding_box
-                self.resource_count[self.target.name] += self.target.quantity
+            if self.pathfind_until(self.target.position,delta_time,45): #TODO: make this texture_size for bounding_box
+                self.states[0] += gather_energy_gain
                 self.target.destroy()
-                for i in range(0,len(self.states)):
-                    if self.states[i]:
-                        self.table[i][self.task] += self.gathering_reward
-
+                
     def reproduce(self, delta_time):
         for resource_name,resource_requirement in self.resource_requirements.items():
             if self.resource_count[resource_name] < resource_requirement.ReproductionEnergyUsage:
@@ -376,6 +383,13 @@ class RLAnimal(Entity):
                         self.table[i][self.task] += self.reproduction_reward
 
     def hunt(self, delta_time):
+        hiding_energy_loss = 0.01
+        fail_energy_loss = 0.1
+        hunt_energy_gain = 0.4
+        hunt_energy_loss = 0.01
+        hunt_hiding_distance = 60
+        
+        
         if self.prey == None:
             self.escape(delta_time)
             return
@@ -393,6 +407,7 @@ class RLAnimal(Entity):
             prey_counter += 1
             #this keeps looping until a valid target is found
         if not targets:
+            self.states[0] -= fail_energy_loss
             return
 
         
@@ -400,23 +415,28 @@ class RLAnimal(Entity):
         if (self.target != targets[0] and not self.target in self.entity_manager.entities) or self.target == self:
             self.target = targets[0]
             self.target.states[2] = int(0)
-
         else:
             self.target.states[2] = int(1)
-            
-        if self.pathfind_until(self.target.position,delta_time,32) :
-            if self.target.resource_on_death in self.resource_count:
-                self.resource_count[self.target.resource_on_death] += self.target.resource_count_on_death
+        
+        if self.target.hiding:  # Check if the prey is hiding
+            distance_to_prey = self.position.distance_to(self.target.position)
+            if distance_to_prey > hunt_hiding_distance:
+                self.pathfind_until(self.target.position, delta_time, hunt_hiding_distance)
             else:
-                self.resource_count[self.target.resource_on_death] = self.target.resource_count_on_death
+                self.states[0] -= hiding_energy_loss
+            return
+
+        if self.pathfind_until(self.target.position, delta_time, 32):
+            self.states[0] += hunt_energy_gain
             self.target.destroy()
             
             # for i in range(0,len(self.states)):
             #     if self.states[i]:
             #         self.table[i][self.task] += self.hunting_reward
                 
-
     def escape(self, delta_time):
+        escape_energy_cost = 0.013
+        
         if self.states[2] == int(0):
             return
         predators = list()
@@ -444,9 +464,48 @@ class RLAnimal(Entity):
             final_corner = corners[0]
             self.target = Vector2(final_corner.x - predators[0].position.x,final_corner.y - predators[0].position.y)
         self.pathfind_until(self.target,delta_time,32)
+        self.states[0] -= escape_energy_cost *delta_time
 
     def hide(self, delta_time):
-        pass
+        hide_energy_gain = 0.1
+        hide_duration = 4
+
+        import simulation.resources
+        #consider which resource is highest priority
+        resource_requirements = sorted(self.resource_requirements.items(),key=lambda x: x[1].priority)
+        targets = list()
+        resource_counter = 0
+        while not targets:
+            if resource_counter > len(resource_requirements)-1:
+                break #no valid targets found
+            for entity in self.entity_manager.entities:
+                if type(entity) is simulation.resources.Resource:   
+                    if entity.name == resource_requirements[resource_counter][0]:
+                        targets.append(entity)
+            resource_counter += 1
+            #this keeps looping until a valid target is found
+        if not targets:
+            return
+        else:
+            targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
+            if self.target != targets[0] or not type(self.target) is simulation.resources.Resource:
+                self.target = targets[0]
+                if self.states[2] == int(1) and random.random() > 0.50:
+                    self.states[2] == int(0)
+                    
+
+            if self.pathfind_until(self.target.position,delta_time,45): #TODO: make this texture_size for bounding_box
+                if not self.hiding:
+                    self.hiding = True
+                    self.hide_timer_main = hide_duration
+                if self.hide_timer_main > 0:
+                    self.hide_timer_main -= delta_time
+                elif self.hide_timer_main < 0:
+                    self.states[0] += hide_energy_gain
+                    self.hiding = False
+                    self.target.destroy()
+                    self.hide_timer_main = 0
+        
 
     def learn_from_action(self, reward):
         self.optimizer.zero_grad()

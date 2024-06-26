@@ -20,7 +20,7 @@ WINDOW_TITLE = str(settings_json["window_title"])
 MAP_WIDTH = int(settings_json["map_width"])
 MAP_HEIGHT = int(settings_json["map_height"])
 CLOCK_SPEED = int(settings_json["clock_speed"])
-SPRITE_SCALE = int(1)
+SPRITE_SCALE = 1
 random.seed()
 arcade.enable_timings()  # Enables Timing For FPS & STATS
 
@@ -172,7 +172,7 @@ class MenuView(arcade.View):  # MENU VIEW
 class SimulationView(arcade.View):      
     def __init__(self,stats):
         super().__init__()
-        arcade.set_background_color(arcade.color.BATTLESHIP_GREY)
+        
         
         self.fps_text = None
         self.arcade_texture_list = dict()

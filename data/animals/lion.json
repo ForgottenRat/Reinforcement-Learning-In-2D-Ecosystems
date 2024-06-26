@@ -11,13 +11,13 @@
 			"ReproductionEnergyUsage": 0.20
 		}
 	},
-	"base_speed": [70,100],
+	"base_speed": [50,95],
 	"prey":{
 		"Deer": 3
 	},
     "resource_on_death": "scavanger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 2,
+    "starting_number": 3,
 	"reproduction_reward": 100,
 	"living_reward":-1,
 	"gathering_reward": -10,

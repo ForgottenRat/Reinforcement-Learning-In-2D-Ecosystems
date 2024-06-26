@@ -13,13 +13,13 @@
 		
 	},
 	
-	"base_speed": [85,150],
+	"base_speed": [65,95],
 	"prey":{
 		"None" : 0
 	},
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
-    "starting_number": 2,
+    "starting_number": 8,
 	"reproduction_reward": 100,
 	"living_reward":0,
 	"gathering_reward": 5000,
