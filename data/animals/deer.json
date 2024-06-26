@@ -1,14 +1,14 @@
 {
 	"animal_type": "Deer",
 	"texture": "animal_deer",
-    "max_age": 20,
+    "max_age": 500,
 	"resource_requirements": {
 		"herbivore_food": {
 			"neededForSurvival": true,
 			"neededForReproduction": true,
 			"priority": 0,
-			"DailyEnergyUsageRate": 0.25,
-			"ReproductionEnergyUsage": 0.15
+			"DailyEnergyUsageRate": 0.10,
+			"ReproductionEnergyUsage": 0.20
 		}
 		
 	},

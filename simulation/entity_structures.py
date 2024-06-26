@@ -51,10 +51,10 @@ class EntityManager():
     def __post_init__(self):
         self.sprite_list = arcade.SpriteList(True)
 
-    def perform_task_for_all_animals(self, delta_time):
+    def assign_task_for_all_animals(self, delta_time):
         for entity in self.entities:
             if isinstance(entity, RLAnimal):
-                entity.perform_task(delta_time)
+                entity.animal_update(delta_time)
 
 @dataclass
 class Entity:
@@ -136,7 +136,7 @@ class RLAnimal(Entity):
         #Task: 1Wander, 2gather, 3reproduce, 4hunt, 5escape, 6hide
         self.task = [int(0), int(0), int(0), int(0),int(0), int(0)]
         #States: living energy, repruction energy, chased, hunt_distance
-        self.states = [float(1), int(1), int(0), int(0)]
+        self.states = [float(1), int(0), int(0), int(0)]
         
 
     @classmethod
@@ -181,35 +181,73 @@ class RLAnimal(Entity):
     def update(self, delta_time):
         self.sprite.center_x = self.position.x
         self.sprite.center_y = self.position.y
-        print(self.position, self.animal_type)
+
         if self.entity_manager.clock.new_day:
             print("NEW DAY")
-            for resource_name, resource_requirement in self.resource_requirements.items():
-                if self.states[0] < resource_requirement.ReproductionEnergyUsage:
-                    self.states[1] = int(0)
-                else:
-                    self.states[1] = int(1)
+            self.entity_manager.clock.new_day = False
+            self.entity_manager.assign_task_for_all_animals(delta_time)
+        self.perform_task(delta_time)
+        
+
+
+
+    def animal_update(self, delta_time):
+        
+        for resource_name, resource_requirement in self.resource_requirements.items():
+            if self.states[0] > 0:
+                self.states[0] -= resource_requirement.DailyEnergyUsageRate
+                self.age +=1
+            
+            if self.states[0] <= 0:
+                self.states[0] = 0
+                self.destroy()
+                return
+    
+            if self.states[0] < resource_requirement.ReproductionEnergyUsage:
+                self.states[1] = int(0)
+            else:
+                self.states[1] = int(1)
 
             if self.age > self.max_age:
                 self.destroy()
+                return
+            
+            if self.animal_type == "Deer":
+                self.states[2] = 0  # Reset chased state
+                for entity in self.entity_manager.entities:
+                    if isinstance(entity, RLAnimal) and entity.target == self:
+                        if random.random() < 0.9:
+                            self.states[2] = 1  
+                            break
+                        else:
+                            return
+                        
+            
+            
+            
+            print(f"Animal Type: {self.animal_type}, Age: {self.age}, States: {self.states}")
+        
+        
+        
+        state_vector = torch.tensor([self.states], dtype=torch.float).to(device)
+        if self.animal_type == "Deer":
+            task_probabilities = self.model_deer(state_vector)
+        elif self.animal_type == "Lion":
+            task_probabilities = self.model_lion(state_vector)
+        else:
+            task_probabilities = torch.zeros(self.output_size).to(device)
+            print("Unidentified Animal for task assign")
+        
+        self.task = torch.argmax(task_probabilities).item()
+        print(f"Assigned task {self.task} to {self.animal_type}")
 
-            for resource_name, resource_requirement in self.resource_requirements.items():
-                if self.states[0] > 0:
-                    self.states[0] -= resource_requirement.DailyEnergyUsageRate
-                    self.age +=1
-                else:
-                    self.death_by_hunger_reward
-                    self.destroy()
-            self.entity_manager.clock.new_day = False
-            self.entity_manager.perform_task_for_all_animals(delta_time)
 
     def perform_task(self, delta_time):
-        state_vector = torch.tensor([self.states], dtype=torch.float).to(device)
-        task_probabilities = self.model_deer(state_vector)
-        task_probabilities = self.model_lion(state_vector)
-        self.task = torch.argmax(task_probabilities).item()
-        self.task = 0
-        print(self.task, self.animal_type)
+        self.task = int(0)
+        if self.animal_type == "Lion":
+            self.task = 3
+        
+        
         if self.task == 0:
             self.wander(delta_time)
         elif self.task == 1:
@@ -226,15 +264,32 @@ class RLAnimal(Entity):
             raise ValueError(f"Unhandled task {self.task}")
 
     def wander(self, delta_time):
-        if not isinstance(self.target, Vector2):
-            self.target = Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y))
-        if self.pathfind_until(self.target,delta_time,32):
-            self.target = Vector2(random.randint(0,self.entity_manager.map_size.x),random.randint(0,self.entity_manager.map_size.y))
-        else:
-            print("wandering failed")
-
         
+        if self.target is None or random.random() < 0.02:  # 2% chance to pick a new target each update
+            self.target = Vector2(random.randint(0, self.entity_manager.map_size.x),
+                                random.randint(0, self.entity_manager.map_size.y))
 
+        # Calculate the direction towards the target
+        direction = Vector2(self.target.x - self.position.x, self.target.y - self.position.y)
+        distance = math.hypot(direction.x, direction.y)
+
+        # Add random to the direction
+        if distance > 0:
+            direction.x /= distance
+            direction.y /= distance
+
+            # Randomly adjust direction to avoid straight lines
+            direction.x += random.uniform(-0.1, 0.1)
+            direction.y += random.uniform(-0.1, 0.1)
+
+            # Normalize the direction again 
+            distance = math.hypot(direction.x, direction.y)
+            direction.x /= distance
+            direction.y /= distance
+
+        self.position.x += direction.x * self.speed * delta_time
+        self.position.y += direction.y * self.speed * delta_time
+        
     def gather(self, delta_time):
         import simulation.resources
         #consider which resource is highest priority
@@ -356,9 +411,9 @@ class RLAnimal(Entity):
                 self.resource_count[self.target.resource_on_death] = self.target.resource_count_on_death
             self.target.destroy()
             
-            for i in range(0,len(self.states)):
-                if self.states[i]:
-                    self.table[i][self.task] += self.hunting_reward
+            # for i in range(0,len(self.states)):
+            #     if self.states[i]:
+            #         self.table[i][self.task] += self.hunting_reward
                 
 
     def escape(self, delta_time):
@@ -421,11 +476,21 @@ class RLAnimal(Entity):
         elif self.position.y < goal.y:
             self.position.y += self.speed * delta_time
             
-    def pathfind_until(self,goal,delta_time,bounding_box):
-        if abs(self.position.x-goal.x) <= bounding_box and abs(self.position.y-goal.y) <= bounding_box:
+    def pathfind_until(self, goal, delta_time, bounding_box):
+        direction = Vector2(goal.x - self.position.x, goal.y - self.position.y)
+        distance = math.hypot(direction.x, direction.y)
+        if distance <= bounding_box:
             return True
-        else:
-            return False
+
+        if distance > 0:
+            direction.x /= distance
+            direction.y /= distance
+
+        self.position.x += direction.x * self.speed * delta_time
+        self.position.y += direction.y * self.speed * delta_time
+
+        return False
+
         
     # def save_model(self,x):
     #     torch.save(self.model.state_dict(),x)
@@ -436,8 +501,15 @@ class RLAnimal(Entity):
     #     model.load_state_dict(state_dict)
     #     return model
         
-    # def simulation_loop(entity_manager):
-    #     for entity in entity_manager.entities:
-    #         if isinstance(entity, RLAnimal):
-    #             entity.save_model(f"./data/model/{entity.animal_type}_model.pth")
-    #             print("Model Saved")
+    def simulation_loop(self, entity_manager):
+        while True:
+            for entity in self.entities:
+                entity.update(self.delta_time)
+        
+        
+        #for entity in entity_manager.entities:
+            
+            
+            # if isinstance(entity, RLAnimal):
+            #     entity.save_model(f"./data/model/{entity.animal_type}_model.pth")
+            #     print("Model Saved")

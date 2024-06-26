@@ -1,13 +1,13 @@
 {
 	"animal_type": "Lion",
 	"texture": "animal_lion",
-    "max_age": 35,
+    "max_age": 500,
 	"resource_requirements": {
 		"carnivore_food": {
 			"neededForSurvival": true,
 			"neededForReproduction": true,
 			"priority": 0,
-			"DailyEnergyUsageRate": 0.125,
+			"DailyEnergyUsageRate": 0.10,
 			"ReproductionEnergyUsage": 0.20
 		}
 	},
