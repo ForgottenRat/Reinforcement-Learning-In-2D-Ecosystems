@@ -7,12 +7,10 @@
 			"neededForSurvival": true,
 			"neededForReproduction": true,
 			"priority": 0,
-			"DailyEnergyUsageRate": 0.10,
+			"DailyEnergyUsageRate": 0.05,
 			"ReproductionEnergyUsage": 0.20
 		}
-		
 	},
-	
 	"base_speed": [65,95],
 	"prey":{
 		"None" : 0
@@ -20,9 +18,10 @@
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
     "starting_number": 8,
-	"reproduction_reward": 100,
-	"living_reward":0,
-	"gathering_reward": 5000,
-	"hunting_reward": 100,
-	"death_by_hunger_reward": -10
+	"reproduction_reward": 2000,
+	"living_reward":25,
+	"gathering_reward": 15,
+	"hunting_reward": -100,
+	"death_by_hunger_reward": -25,
+	"hiding_reward": 20
 }

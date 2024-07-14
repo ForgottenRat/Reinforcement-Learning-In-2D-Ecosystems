@@ -10,7 +10,7 @@ class EventManager():
     area_height: int
     def update(self,delta_time):
         day_count = self.entity_manager.clock.day_counter
-        if self.clock.new_day and day_count >= 2:        
+        if self.clock.new_day and day_count >= 1:        
             for resource_name, resource in self.resource_manager.resources.items():  #TODO: add config option for this
                 if random.randint(0,100) <= resource[self.resource_manager.SPAWNCHANCE]:
                     for i in range(0,resource[self.resource_manager.SPAWNAMOUNT]):

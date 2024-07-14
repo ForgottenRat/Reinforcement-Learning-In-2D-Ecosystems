@@ -1,13 +1,13 @@
 {
 	"animal_type": "Lion",
 	"texture": "animal_lion",
-    "max_age": 500,
+    "max_age": 2,
 	"resource_requirements": {
 		"carnivore_food": {
 			"neededForSurvival": true,
 			"neededForReproduction": true,
 			"priority": 0,
-			"DailyEnergyUsageRate": 0.10,
+			"DailyEnergyUsageRate": 0.05,
 			"ReproductionEnergyUsage": 0.20
 		}
 	},
@@ -17,10 +17,11 @@
 	},
     "resource_on_death": "scavanger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 3,
-	"reproduction_reward": 100,
-	"living_reward":-1,
-	"gathering_reward": -10,
-	"hunting_reward": 17,
-	"death_by_hunger_reward": 0
+    "starting_number": 2,
+	"reproduction_reward": 40,
+	"living_reward":10,
+	"gathering_reward": -50,
+	"hunting_reward": 15,
+	"death_by_hunger_reward": -10,
+	"hiding_reward": -50
 }	

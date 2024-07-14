@@ -248,7 +248,7 @@ def main():  # MAIN FUNCTION
         title=WINDOW_TITLE,
         antialiasing=False,
         enable_polling=True,
-        fullscreen=True     
+        fullscreen=False     
         )
 
     font_loader(fonts, font_path)
@@ -275,4 +275,3 @@ def main():  # MAIN FUNCTION
 
 if __name__ == "__main__":
     main()
-
