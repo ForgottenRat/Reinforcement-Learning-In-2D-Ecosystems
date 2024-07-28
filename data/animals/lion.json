@@ -1,27 +1,28 @@
 {
-	"animal_type": "Lion",
-	"texture": "animal_lion",
-    "max_age": 2,
-	"resource_requirements": {
-		"carnivore_food": {
-			"neededForSurvival": true,
-			"neededForReproduction": true,
-			"priority": 0,
-			"DailyEnergyUsageRate": 0.05,
-			"ReproductionEnergyUsage": 0.20
-		}
-	},
-	"base_speed": [50,95],
-	"prey":{
-		"Deer": 3
-	},
-    "resource_on_death": "scavanger_meat",
+    "animal_type": "Lion",
+    "texture": "animal_lion",
+    "max_age": 15,
+    "resource_requirements": {
+        "carnivore_food": {
+            "neededForSurvival": true,
+            "neededForReproduction": true,
+            "priority": 0,
+            "DailyEnergyUsageRate": 0.10,
+            "ReproductionEnergyUsage": 0.30
+        }
+    },
+    "base_speed": [50, 80],
+    "prey": {
+        "Deer": 3
+    },
+    "resource_on_death": "scavenger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 2,
-	"reproduction_reward": 40,
-	"living_reward":10,
-	"gathering_reward": -50,
-	"hunting_reward": 15,
-	"death_by_hunger_reward": -10,
-	"hiding_reward": -50
-}	
+    "starting_number": 6,
+    "reproduction_reward": 50,
+    "living_reward": 20,
+    "gathering_reward": -20,
+    "hunting_reward": 30,
+    "death_by_hunger_reward": -30,
+    "hiding_reward": -10,
+	"escaping_reward": -10
+}

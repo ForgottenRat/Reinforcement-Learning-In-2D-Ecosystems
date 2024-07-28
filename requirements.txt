@@ -1,7 +1,3 @@
-arcade (LATEST DEV VERSION)
-arcade.gui 
-time
-json
-random
-os
+arcade==3.0.0.dev34
 matplotlib
+torch

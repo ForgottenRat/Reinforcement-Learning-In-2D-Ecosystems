@@ -7,6 +7,7 @@ import random
 import os
 from arcade.gui import *
 import time
+from datetime import datetime
 
 
 with open("./data/settings.json") as settings_json: # Loading JSON settings file
@@ -20,6 +21,7 @@ WINDOW_TITLE = str(settings_json["window_title"])
 MAP_WIDTH = int(settings_json["map_width"])
 MAP_HEIGHT = int(settings_json["map_height"])
 CLOCK_SPEED = int(settings_json["clock_speed"])
+TRAINING_MODE = str(settings_json["training_mode"])
 SPRITE_SCALE = 1
 random.seed()
 arcade.enable_timings()  # Enables Timing For FPS & STATS
@@ -169,35 +171,45 @@ class MenuView(arcade.View):  # MENU VIEW
         arcade.close_window()  # Quits Arcade
 
 
-class SimulationView(arcade.View):      
-    def __init__(self,stats):
+class SimulationView(arcade.View):
+    def __init__(self, stats):
         super().__init__()
-        
-        
+        self.stats = stats
+        self.setup()  # Initialize the simulation
+
+    def setup(self):
         self.fps_text = None
         self.arcade_texture_list = dict()
-        self.path_to_data = os.path.join(".","data")
+        self.path_to_data = os.path.join(".", "data")
         self.sprite_texture_path = "./data/texture/SpriteTexture/"  # Path To Sprite Texture
-        self.stats = stats
         with open(os.path.join(self.sprite_texture_path, "texture_list.json")) as texture_json:
             texture_list = json.load(texture_json)
 
         for texture in texture_list:
             self.arcade_texture_list[texture] = arcade.load_texture(os.path.join(
                 self.sprite_texture_path, texture_list[texture]["texture_name"]))
-            self.arcade_texture_list[texture].size = (texture_list[texture]["width"],texture_list[texture]["height"])
+            self.arcade_texture_list[texture].size = (texture_list[texture]["width"], texture_list[texture]["height"])
         self.clock = clock.Clock(CLOCK_SPEED)
-        self.entity_manager = entity_structures.EntityManager(list(), entity_structures.Vector2(MAP_WIDTH, MAP_HEIGHT), self.clock, stats, self.arcade_texture_list)
-        self.simulation_texture = arcade.load_texture(os.path.join(self.path_to_data,"texture","SpriteTexture","simulation_background.png"))
+        self.entity_manager = entity_structures.EntityManager(list(), entity_structures.Vector2(MAP_WIDTH, MAP_HEIGHT), self.clock, self.stats, self.arcade_texture_list)
+        self.simulation_texture = arcade.load_texture(os.path.join(self.path_to_data, "texture", "SpriteTexture", "simulation_background.png"))
         self.resource_manager = resources.ResourceManager(self.path_to_data)
         for path in os.listdir(os.path.join(self.path_to_data, "animals")):
-            with open(os.path.join(self.path_to_data, "animals",path)) as animal:
+            with open(os.path.join(self.path_to_data, "animals", path)) as animal:
                 decoded_animal = json.load(animal)
-                stats.populations[decoded_animal["animal_type"]] = 0
-                stats.populations_per_day[decoded_animal["animal_type"]] = list()
-                entity_structures.RLAnimal.initialize_animals(decoded_animal,self.entity_manager)
-        #event manager
-        self.event_manager = event_manager.EventManager(self.entity_manager,self.resource_manager,self.clock,MAP_WIDTH,MAP_HEIGHT)
+                self.stats.populations[decoded_animal["animal_type"]] = 0
+                self.stats.populations_per_day[decoded_animal["animal_type"]] = list()
+                entity_structures.RLAnimal.initialize_animals(decoded_animal, self.entity_manager)
+        
+        # event manager
+        self.event_manager = event_manager.EventManager(self.entity_manager, self.resource_manager, self.clock, MAP_WIDTH, MAP_HEIGHT)
+
+        self.population_text = arcade.Text(text="", font_size=25, x=480, y=WINDOW_HEIGHT-33, color=arcade.color.WHITE)
+        self.fps_text = arcade.Text(text="", font_size=25, x=18, y=WINDOW_HEIGHT-33, color=arcade.color.BLACK)
+        self.day_counter_text = arcade.Text(text="", font_size=25, x=200, y=WINDOW_HEIGHT-33, color=arcade.color.BLACK)
+        if TRAINING_MODE == "True":
+            self.training_text = arcade.Text(text="Training Mode Active", font_size=25, x=1200, y=WINDOW_HEIGHT-33, color=arcade.color.RED)
+        else:
+            self.training_text = arcade.Text(text="Training Mode InActive", font_size=25, x=1200, y=WINDOW_HEIGHT-33, color=arcade.color.RED)
 
     def on_draw(self):
         self.clear()
@@ -206,20 +218,12 @@ class SimulationView(arcade.View):
             self.window.width / 2, self.window.height / 2, self.window.width, self.window.height, self.simulation_texture)
         self.entity_manager.sprite_list.draw()
 
-        text = "" 
-        for animal_name,animal_population in self.stats.populations.items():
-            text +=str(animal_name)+": "+str( animal_population) +str("   ")
-        arcade.Text(text=text, font_size = 25, x=480, y=WINDOW_HEIGHT-33,color=arcade.color.WHITE).draw()
-        arcade.Text(  # Updates FPS
-            font_size = 25,
-            text=f"FPS: {round(arcade.get_fps())}",
-            x=18, y=WINDOW_HEIGHT-33,
-            color=arcade.color.BLACK).draw()
-        arcade.Text(  # current day
-            font_size = 25,
-            text="Day Counter: " + str(self.clock.day_counter),
-            x=200, y=WINDOW_HEIGHT-33,
-            color=arcade.color.BLACK).draw()
+        # Draw text objects
+        self.population_text.draw()
+        self.fps_text.draw()
+        self.day_counter_text.draw()
+        self.training_text.draw()
+    
     def on_update(self, delta_time):
         for entity in self.entity_manager.entities:
             entity.update(delta_time)
@@ -229,6 +233,45 @@ class SimulationView(arcade.View):
             for key, value in self.entity_manager.stats.populations.items():
                 self.entity_manager.stats.populations_per_day[key].append(value)
         self.event_manager.update(delta_time)
+
+        # Check populations and switch to menu view if necessary
+        if TRAINING_MODE == "True":
+            if not self.entity_manager.check_population():
+                self.restart_simulation()
+
+        # Update text content
+        population_text = ""
+        for animal_name, animal_population in self.stats.populations.items():
+            population_text += f"{animal_name}: {animal_population}   "
+        self.population_text.text = population_text
+        self.fps_text.text = f"FPS: {round(arcade.get_fps())}"
+        self.day_counter_text.text = f"Day Counter: {self.clock.day_counter}"
+
+
+    def restart_simulation(self):
+        print(''' -----> Restarting Simulation <-----
+       -Training Mode enabled
+              
+              ''')
+        self.save_population_data()
+        self.setup()  # Reinitialize the simulation
+    
+    def save_population_data(self):
+        # Get current time
+        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Create file name
+        file_name = f'./output/population_data_{current_time}.json'
+
+        # Gather data
+        population_data = {
+            'final_populations': self.stats.populations,
+            'populations_per_day': self.stats.populations_per_day,
+            'day_counter': self.clock.day_counter
+        }
+
+        # Save to JSON file
+        with open(file_name, 'w') as json_file:
+            json.dump(population_data, json_file, indent=4)
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ESCAPE:
@@ -256,22 +299,6 @@ def main():  # MAIN FUNCTION
     menu_view.setup()
     window.show_view(menu_view)  # Changes View To Menu
     arcade.run()
-    
-    menu_view.stats.create_json()
-    figure, plots = plt.subplots(2, 1)
-    plots[0].bar(menu_view.stats.populations.keys(),menu_view.stats.populations.values())
-    plots[0].set_title("Final Populations")
-    plots[0].set_ylabel("Population")
-    plots[0].set_xlabel("Animal")
-    for key, value in menu_view.stats.populations.items():
-        menu_view.stats.populations_per_day[key].append(value)
-    for key,value in menu_view.stats.populations_per_day.items():
-        plots[1].plot(value,label=str(key))
-    plots[1].set_title("Final Population Per Day")
-    plots[1].set_ylabel("Population")
-    plots[1].set_xlabel("Days")
-    plt.legend(loc='upper center')
-    plt.show()
 
 if __name__ == "__main__":
     main()

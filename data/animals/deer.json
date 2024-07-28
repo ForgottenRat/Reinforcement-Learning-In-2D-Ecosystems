@@ -1,27 +1,28 @@
 {
-	"animal_type": "Deer",
-	"texture": "animal_deer",
-    "max_age": 500,
-	"resource_requirements": {
-		"herbivore_food": {
-			"neededForSurvival": true,
-			"neededForReproduction": true,
-			"priority": 0,
-			"DailyEnergyUsageRate": 0.05,
-			"ReproductionEnergyUsage": 0.20
-		}
-	},
-	"base_speed": [65,95],
-	"prey":{
-		"None" : 0
-	},
+    "animal_type": "Deer",
+    "texture": "animal_deer",
+    "max_age": 10,
+    "resource_requirements": {
+        "herbivore_food": {
+            "neededForSurvival": true,
+            "neededForReproduction": true,
+            "priority": 0,
+            "DailyEnergyUsageRate": 0.07,
+            "ReproductionEnergyUsage": 0.15
+        }
+    },
+    "base_speed": [60, 75],
+    "prey": {
+        "None": 0
+    },
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
-    "starting_number": 8,
-	"reproduction_reward": 2000,
-	"living_reward":25,
-	"gathering_reward": 15,
-	"hunting_reward": -100,
-	"death_by_hunger_reward": -25,
-	"hiding_reward": 20
+    "starting_number": 15,
+    "reproduction_reward": 500,
+    "living_reward": 20,
+    "gathering_reward": 10,
+    "hunting_reward": -100,
+    "death_by_hunger_reward": -25,
+    "hiding_reward": 25,
+	"escaping_reward": 25
 }
