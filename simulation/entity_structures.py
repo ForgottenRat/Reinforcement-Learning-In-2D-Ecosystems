@@ -10,6 +10,7 @@ import arcade
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #Select gpu for torch
 
@@ -64,6 +65,7 @@ class Entity:
     position: Vector2     
     entity_manager: EntityManager
     texture_name: str
+
     def update(self,delta_time):
         pass
 
@@ -87,11 +89,17 @@ class DQNetwork(nn.Module):
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, output_size)
+        torch.nn.init.kaiming_normal_(self.fc1.weight, mode='fan_out', nonlinearity='relu')
+        torch.nn.init.kaiming_normal_(self.fc2.weight, mode='fan_out', nonlinearity='relu')
 
     def forward(self, x):
+       
         x = self.fc1(x)
+        
         x = self.relu(x)
+        
         x = self.fc2(x)
+
         return x
     
     def save_model(self, file_path):
@@ -116,16 +124,14 @@ class DQNetwork(nn.Module):
 @dataclass
 class RLAnimal(Entity):
     import simulation.resources
+    model_deer: None
+    optimizer_deer: None
+    criterion_deer: None
+    model_lion: None
+    optimizer_lion: None
+    criterion_lion: None
+    id: str
     
-    #Model
-    model_deer = None
-    optimizer_deer = None
-    criterion_deer = None
-    model_lion = None
-    optimizer_lion = None
-    criterion_lion = None
-    models_loaded = False
-
     #Animal
     animal_type: str
     age: int
@@ -148,29 +154,10 @@ class RLAnimal(Entity):
     hiding_reward: int
     escaping_reward: int
 
+
     def __post_init__(self):
         super().__post_init__()
-        self.input_size = 9  # State size
-        self.hidden_size = 64
-        self.output_size = 6  # Task size
-
-        if not RLAnimal.models_loaded:
-            RLAnimal.model_deer = DQNetwork(self.input_size, self.hidden_size, self.output_size).to(device)
-            RLAnimal.optimizer_deer = optim.Adam(RLAnimal.model_deer.parameters(), lr=0.0001)
-            RLAnimal.criterion_deer = nn.BCEWithLogitsLoss()
-
-            RLAnimal.model_lion = DQNetwork(self.input_size, self.hidden_size, self.output_size).to(device)
-            RLAnimal.optimizer_lion = optim.Adam(RLAnimal.model_lion.parameters(), lr=0.0001)
-            RLAnimal.criterion_lion = nn.BCEWithLogitsLoss()
-
-            RLAnimal.model_deer.load_model("./data/model/Deer_model.pth")
-            RLAnimal.model_lion.load_model("./data/model/Lion_model.pth")
-
-            if RLAnimal.model_deer.is_model_loaded() and RLAnimal.model_lion.is_model_loaded():
-                RLAnimal.models_loaded = True
-            else:
-                print("Error loading models.")
-                RLAnimal.models_loaded = False
+        
 
         self.entity_manager.stats.populations[self.animal_type] += 1
         self.resource_count = dict.fromkeys(self.resource_requirements,0)
@@ -182,17 +169,43 @@ class RLAnimal(Entity):
         #Task: 0Wander, 1gather, 2reproduce, 3hunt, 4escape, 5hide
         self.task = [int(0), int(0), int(0), int(0),int(0), int(0)]
         #States: 0Living energy, 1Rep En, 2Chased, 3Age, 4Rep Urg, 5Nearby Mate, 6Food Prox, 7Predator Prox, 8Prey Prox
-        self.states = [float(1), int(0), int(0), int(0), float(0), int(0), float('inf'), float('inf'), float('inf')]
+        self.states = [float(1), int(0), int(0), int(0), float(0), int(0), float(0), float(0), float(0)]
         self.hiding = False
-        self.epsilon: float = 0.01  # Exploration rate
+        self.epsilon: float = 0.9  # Exploration rate
         
         
     @classmethod
     def initialize_animals(self, animal, entity_manager):
         # Load configurations
         import simulation.resources
-        model_path_deer = f"./data/model/Deer_model.pth" 
-        model_path_lion = f"./data/model/Lion_model.pth"
+        self.input_size = 9  # State size
+        self.hidden_size = 64
+        self.output_size = 6  # Task size
+        path_deer = "./data/model/Deer_model.pth"
+        model_deer = DQNetwork(self.input_size, self.hidden_size, self.output_size).to(device)
+        
+        model_lion = DQNetwork(self.input_size, self.hidden_size, self.output_size).to(device)
+        if os.path.exists(path_deer):
+            model_deer_w = torch.load(path_deer)
+            model_deer.load_state_dict(model_deer_w)
+            
+        
+
+        path_lion = "./data/model/Lion_model.pth"
+        if os.path.exists(path_lion):
+            model_lion_w = torch.load(path_lion)
+            model_lion.load_state_dict(model_lion_w)
+        
+            
+        
+        model_deer.eval()
+        optimizer_deer = optim.Adam(model_deer.parameters(), lr=0.01)
+        criterion_deer = nn.BCEWithLogitsLoss()
+
+        model_lion.eval()
+        optimizer_lion = optim.Adam(model_lion.parameters(), lr=0.01)
+        criterion_lion = nn.BCEWithLogitsLoss()
+
         for _ in range(animal["starting_number"]):
             RLAnimal(Vector2(random.randint(0,entity_manager.map_size.x), random.randint(0, entity_manager.map_size.y)),
                     entity_manager = entity_manager,
@@ -214,7 +227,14 @@ class RLAnimal(Entity):
                     hunting_reward = animal["hunting_reward"],
                     death_by_hunger_reward = animal["death_by_hunger_reward"],
                     hiding_reward = animal["hiding_reward"],
-                    escaping_reward= animal["escaping_reward"]
+                    escaping_reward= animal["escaping_reward"],
+                    model_deer = model_deer,
+                    model_lion = model_lion,
+                    optimizer_deer = optimizer_deer,
+                    optimizer_lion = optimizer_lion,
+                    criterion_deer = criterion_deer,
+                    criterion_lion = criterion_lion,
+                    id = str(random.randint(0,999999))
             )
         
 
@@ -262,16 +282,14 @@ class RLAnimal(Entity):
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         
         optimizer.step()
-
-        if done:
+        if self.entity_manager.clock.day_counter %3 == 2:
+            print("MDOEL SAVE")
             if self.animal_type == "Deer":
                 model.save_model(f"./data/model/Deer_model.pth")
             elif self.animal_type == "Lion":
                 model.save_model(f"./data/model/Lion_model.pth")
 
-        print(f"q_values shape: {q_values.shape}")  # Should be [1, 6]
-        print(f"q_value shape: {q_value.shape}")    # Should be [1]
-        print(f"target_q_value shape: {target_q_value.shape}")  # Should be [1]
+        print("Q VALUES:", q_values)
         print(f"Updated Q-value for task {self.task}: {q_value}")
         print(f"Target Q-value: {target_q_value}")
         print(f"Loss: {loss.item()}")
@@ -370,8 +388,22 @@ class RLAnimal(Entity):
         else:
             task_probabilities = torch.zeros(self.output_size).to(device)
             print("Unidentified Animal for task assign")
+        
+        file_name = "cycle_num"
+        cycle_num = 0
+        if os.path.exists(file_name):
+            # Open the file in read mode ('r')
+            with open(file_name, 'r') as file:
+                # Read the contents of the file
+                content = file.read()
+                # Convert the read string back to an integer
+                cycle_num = int(content)
+                # Optionally, print the read integer to verify
 
-        if random.random() < self.epsilon:
+        if cycle_num!=0:
+            epsilon_temp = self.epsilon / (cycle_num/10)
+
+        if random.random() < epsilon_temp:
             # Explore: select a random task
             self.task = random.randint(0, self.output_size - 1)
         else:
@@ -435,14 +467,15 @@ class RLAnimal(Entity):
         self.position.x += direction.x * self.speed * delta_time
         self.position.y += direction.y * self.speed * delta_time
         self.states[0] -= wander_energy_cost
-        self.learn_from_action(-0.1,self.states,False)
+
+        
         
     def gather(self, delta_time):
         gather_energy_gain = 0.35
         
         if self.animal_type == "Lion":
             self.learn_from_action(self.gathering_reward, self.states, False)
-            self.assign_task(delta_time)
+            self.task = 0
         
         import simulation.resources
         #consider which resource is highest priority
@@ -476,7 +509,7 @@ class RLAnimal(Entity):
         
         for resource_name, resource_requirement in self.resource_requirements.items():
             if self.states[0] < resource_requirement.ReproductionEnergyUsage:
-                self.assign_task(delta_time)
+                self.task = 0
                 return
             
         usage = resource_requirement.ReproductionEnergyUsage
@@ -492,7 +525,7 @@ class RLAnimal(Entity):
                         and entity.age > 3]  # Ensure the mate is also ready to reproduce
 
         if not potential_mates:
-            self.assign_task(delta_time)
+            self.task = 0
             return
 
         # Sort mates by proximity and select the closest
@@ -501,7 +534,7 @@ class RLAnimal(Entity):
 
         # Move towards the mate
         if not self.pathfind_until(mate.position, delta_time, 45):
-            self.assign_task(delta_time)
+            self.task = 0
             return
 
         # Create a child if within range
@@ -517,7 +550,8 @@ class RLAnimal(Entity):
             
             # Inherit attributes with some variability
             child_speed = random.choice([self.speed, mate.speed]) + random.uniform(-0.1, 0.1)
-            
+            child_id = str(self.id) + "_" + str(mate.id) + "_" + str(random.randint(0,999999))
+
             child = RLAnimal(
                 position=child_position,
                 entity_manager=self.entity_manager,
@@ -539,7 +573,14 @@ class RLAnimal(Entity):
                 hunting_reward=self.hunting_reward,
                 death_by_hunger_reward=self.death_by_hunger_reward,
                 hiding_reward = self.hiding_reward,
-                escaping_reward = self.escaping_reward
+                escaping_reward = self.escaping_reward,
+                model_deer = self.model_deer,
+                model_lion = self.model_lion,
+                optimizer_deer = self.optimizer_deer,
+                optimizer_lion = self.optimizer_lion,
+                criterion_deer = self.criterion_deer,
+                criterion_lion = self.criterion_lion,
+                id = random.randint(0,999999)
             )
             
             if self.children is None:
@@ -572,7 +613,7 @@ class RLAnimal(Entity):
         
         
         if self.prey == None:
-            self.learn_from_action(-10, self.states, False)
+            self.learn_from_action(self.hunting_reward, self.states, False)
             return
         
         prey = sorted(self.prey.items(),key=lambda x: x[1])
@@ -589,7 +630,7 @@ class RLAnimal(Entity):
             #this keeps looping until a valid target is found
         if not targets:
             self.learn_from_action(-10, self.states, False)
-            self.assign_task(delta_time)
+            self.task = 0
             return
 
         
@@ -610,21 +651,23 @@ class RLAnimal(Entity):
 
         if self.pathfind_until(self.target.position, delta_time, 32):
             self.states[0] += hunt_energy_gain
+            self.target.learn_from_action(-10, self.target.states, False)
             self.target.destroy()
             self.learn_from_action(self.hunting_reward, self.states, False)
-            self.assign_task(delta_time)
+            self.task = 0
+            
 
         else:
             self.states[0] -= fail_energy_loss
             self.learn_from_action(0, self.states, False)
-            self.assign_task(delta_time)
+            self.task = 0
                     
     def escape(self, delta_time):
         escape_energy_cost = 0.006
         
         if self.animal_type == "Lion":
             self.learn_from_action(self.escaping_reward, self.states, False)
-            self.assign_task(delta_time)
+            self.task = 0
 
         if self.states[2] == int(0):
             return
@@ -633,7 +676,7 @@ class RLAnimal(Entity):
             if type(entity) is type(RLAnimal) and entity.target == self:
                 predators.append(entity)
         if not predators:
-            self.assign_task(delta_time)
+            self.task = 0
             self.states[2] == int(0)
             return
         predators = sorted(predators,key=lambda x: x.position.distance_to(self.position))
@@ -660,7 +703,7 @@ class RLAnimal(Entity):
         if all(predator.position.distance_to(self.position) > 45 for predator in predators):
             self.learn_from_action(self.escaping_reward, self.states, False)
             self.states[2] = int(0)
-            self.assign_task(delta_time)
+            self.task = 0
     
     def hide(self, delta_time):
         hide_energy_gain = 0.15
@@ -681,15 +724,16 @@ class RLAnimal(Entity):
             resource_counter += 1
         if not targets:
             self.learn_from_action(-10, self.states, False)
-            
+            self.task = 0
             return
+        
         else:
             targets.sort(key=lambda x:x.position.distance_to(self.position),reverse=False)
             if self.target != targets[0] or not type(self.target) is simulation.resources.Resource:
                 self.target = targets[0]
-                if self.states[2] == int(1) and random.random() > 0.4:
-                    self.states[2] == int(0)
-                    
+            if self.states[2] == int(1) and random.random() > 0.4:
+                self.states[2] == int(0)
+                
 
             if self.pathfind_until(self.target.position,delta_time,45): #TODO: make this texture_size for bounding_box
                 if not self.hiding:
@@ -702,8 +746,8 @@ class RLAnimal(Entity):
                     self.hiding = False
                     self.target.destroy()
                     self.hide_timer_main = 0 
-                    self.learn_from_action(hide_energy_gain, self.states, False)
-                    self.assign_task(delta_time) 
+                    self.learn_from_action(self.hiding_reward, self.states, False)
+                    self.task = 0
     
     def destroy(self):
         if self in self.entity_manager.entities:

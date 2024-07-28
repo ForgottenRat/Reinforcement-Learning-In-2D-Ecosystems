@@ -8,7 +8,8 @@ import os
 from arcade.gui import *
 import time
 from datetime import datetime
-
+import torch
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 with open("./data/settings.json") as settings_json: # Loading JSON settings file
     settings_json = json.load(settings_json)
@@ -161,6 +162,23 @@ class MenuView(arcade.View):  # MENU VIEW
 
     # Button Functions
     def on_click_StartSimulation(self, event):
+        file_name = "cycle_num"
+        cycle_num = 0
+        if os.path.exists(file_name):
+            # Open the file in read mode ('r')
+            with open(file_name, 'r') as file:
+                # Read the contents of the file
+                content = file.read()
+                # Convert the read string back to an integer
+                cycle_num = int(content)
+                # Optionally, print the read integer to verify
+        else:
+            cycle_num = 0
+
+        with open(file_name, 'w') as file:
+            # Convert the integer to a string and write it to the file
+            cycle_num += 1
+            file.write(str(cycle_num))
         print("View Change To SimulationView")
         self.ui_manager.disable()  # Unloads buttons
         simulation_view = SimulationView(self.stats)          
@@ -207,9 +225,9 @@ class SimulationView(arcade.View):
         self.fps_text = arcade.Text(text="", font_size=25, x=18, y=WINDOW_HEIGHT-33, color=arcade.color.BLACK)
         self.day_counter_text = arcade.Text(text="", font_size=25, x=200, y=WINDOW_HEIGHT-33, color=arcade.color.BLACK)
         if TRAINING_MODE == "True":
-            self.training_text = arcade.Text(text="Training Mode Active", font_size=25, x=1200, y=WINDOW_HEIGHT-33, color=arcade.color.RED)
+            self.training_text = arcade.Text(text="Training Mode Active", font_size=25, x=1200, y=WINDOW_HEIGHT-33, color=arcade.color.BLUE)
         else:
-            self.training_text = arcade.Text(text="Training Mode InActive", font_size=25, x=1200, y=WINDOW_HEIGHT-33, color=arcade.color.RED)
+            self.training_text = arcade.Text(text="Training Mode InActive", font_size=25, x=1200, y=WINDOW_HEIGHT-33, color=arcade.color.BLUE)
 
     def on_draw(self):
         self.clear()
@@ -253,6 +271,24 @@ class SimulationView(arcade.View):
        -Training Mode enabled
               
               ''')
+        
+        file_name = "cycle_num"
+        cycle_num = 0
+        if os.path.exists(file_name):
+            # Open the file in read mode ('r')
+            with open(file_name, 'r') as file:
+                # Read the contents of the file
+                content = file.read()
+                # Convert the read string back to an integer
+                cycle_num = int(content)
+                # Optionally, print the read integer to verify
+        else:
+            cycle_num = 0
+
+        with open(file_name, 'w') as file:
+            # Convert the integer to a string and write it to the file
+            cycle_num += 1
+            file.write(str(cycle_num))
         self.save_population_data()
         self.setup()  # Reinitialize the simulation
     
