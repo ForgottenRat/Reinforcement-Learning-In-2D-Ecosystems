@@ -6,7 +6,6 @@ import arcade
 import random
 import os
 from arcade.gui import *
-import time
 from datetime import datetime
 import torch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -289,25 +288,10 @@ class SimulationView(arcade.View):
             # Convert the integer to a string and write it to the file
             cycle_num += 1
             file.write(str(cycle_num))
-        self.save_population_data()
+        
         self.setup()  # Reinitialize the simulation
     
-    def save_population_data(self):
-        # Get current time
-        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-        # Create file name
-        file_name = f'./output/population_data_{current_time}.json'
 
-        # Gather data
-        population_data = {
-            'final_populations': self.stats.populations,
-            'populations_per_day': self.stats.populations_per_day,
-            'day_counter': self.clock.day_counter
-        }
-
-        # Save to JSON file
-        with open(file_name, 'w') as json_file:
-            json.dump(population_data, json_file, indent=4)
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ESCAPE:

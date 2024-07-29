@@ -11,8 +11,17 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import os
+import json
+from datetime import datetime
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #Select gpu for torch
+
+@dataclass
+class SimulationSummary:
+    days: int
+    daily_population: List[Dict[str, int]]
+    daily_animal_data: List[Dict[str, List[Dict[str, any]]]]
+
 
 @dataclass
 class Vector2:
@@ -39,13 +48,16 @@ class EntityManager():
     clock: simulation.clock.Clock
     stats: simulation.output.Stats
     textures: list
+    summary: SimulationSummary = None
     
     def __post_init__(self):
         self.sprite_list = arcade.SpriteList(True)
+        self.summary = SimulationSummary(days=0, daily_population=[], daily_animal_data=[])
 
     def check_population(self):
         for population in self.stats.populations.values():
             if population == 0:
+                self.generate_summary_json()
                 return False
         return True
     
@@ -57,6 +69,40 @@ class EntityManager():
     def update(self, delta_time):
         for entity in self.entities:
             entity.update(delta_time)
+            
+        if self.clock.new_day:
+            self.clock.new_day = False
+            self.assign_task_for_all_animals(delta_time)
+            self.record_daily_data()
+
+    def record_daily_data(self):
+        day_data = {
+            'day': self.clock.day_counter,
+            'population': {k: v for k, v in self.stats.populations.items()},
+            'animals': []
+        }
+
+        for entity in self.entities:
+            if isinstance(entity, RLAnimal):
+                animal_data = {
+                    'animal_type': entity.animal_type,
+                    'animal_id': entity.id,
+                    'states': entity.states,
+                    'task': entity.task
+                }
+                day_data['animals'].append(animal_data)
+        
+        self.summary.daily_animal_data.append(day_data)
+        self.summary.days += 1
+
+    def generate_summary_json(self):
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"./output/simulation_summary_{current_time}.json"
+        with open(file_name, 'w') as json_file:
+            json.dump(self.summary.__dict__, json_file, indent=4)
+        print(f"Simulation summary saved to {file_name}")
+
+
     
 
 
@@ -93,13 +139,9 @@ class DQNetwork(nn.Module):
         torch.nn.init.kaiming_normal_(self.fc2.weight, mode='fan_out', nonlinearity='relu')
 
     def forward(self, x):
-       
         x = self.fc1(x)
-        
         x = self.relu(x)
-        
         x = self.fc2(x)
-
         return x
     
     def save_model(self, file_path):
@@ -188,15 +230,11 @@ class RLAnimal(Entity):
         if os.path.exists(path_deer):
             model_deer_w = torch.load(path_deer)
             model_deer.load_state_dict(model_deer_w)
-            
-        
 
         path_lion = "./data/model/Lion_model.pth"
         if os.path.exists(path_lion):
             model_lion_w = torch.load(path_lion)
             model_lion.load_state_dict(model_lion_w)
-        
-            
         
         model_deer.eval()
         optimizer_deer = optim.Adam(model_deer.parameters(), lr=0.01)
@@ -249,6 +287,7 @@ class RLAnimal(Entity):
             print("#=====-+-- Day number:", self.entity_manager.clock.day_counter,"--+-====#")
             self.entity_manager.clock.new_day = False
             self.entity_manager.assign_task_for_all_animals(delta_time)
+            self.entity_manager.record_daily_data()
         self.perform_task(delta_time)
     
     def learn_from_action(self, reward, next_state, done):
@@ -289,10 +328,10 @@ class RLAnimal(Entity):
             elif self.animal_type == "Lion":
                 model.save_model(f"./data/model/Lion_model.pth")
 
-        print("Q VALUES:", q_values)
-        print(f"Updated Q-value for task {self.task}: {q_value}")
-        print(f"Target Q-value: {target_q_value}")
-        print(f"Loss: {loss.item()}")
+        # print("Q VALUES:", q_values)
+        # print(f"Updated Q-value for task {self.task}: {q_value}")
+        # print(f"Target Q-value: {target_q_value}")
+        # print(f"Loss: {loss.item()}")
 
 
     def animal_update(self, delta_time):
