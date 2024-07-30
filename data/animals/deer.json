@@ -17,12 +17,12 @@
     },
     "resource_on_death": "carnivore_food",
     "resource_count_on_death": 3,
-    "starting_number": 6,
-    "reproduction_reward": 50,
-    "living_reward": 20,
-    "gathering_reward": 10,
-    "hunting_reward": -100,
-    "death_by_hunger_reward": -25,
-    "hiding_reward": 25,
-	"escaping_reward": 25
+    "starting_number": 15,
+    "reproduction_reward": 20,
+    "living_reward": 10,
+    "gathering_reward": 15,
+    "hunting_reward": -10,
+    "death_by_hunger_reward": -10,
+    "hiding_reward": 10,
+	"escaping_reward": 15
 }

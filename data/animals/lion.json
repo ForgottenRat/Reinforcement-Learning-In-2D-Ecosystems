@@ -11,18 +11,18 @@
             "ReproductionEnergyUsage": 0.30
         }
     },
-    "base_speed": [50, 80],
+    "base_speed": [55, 80],
     "prey": {
         "Deer": 3
     },
     "resource_on_death": "scavenger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 2,
-    "reproduction_reward": 50,
-    "living_reward": 20,
-    "gathering_reward": -20,
-    "hunting_reward": 30,
+    "starting_number": 4,
+    "reproduction_reward": 15,
+    "living_reward": 5,
+    "gathering_reward": -15,
+    "hunting_reward": 10,
     "death_by_hunger_reward": -30,
-    "hiding_reward": -10,
-	"escaping_reward": -10
+    "hiding_reward": -15,
+	"escaping_reward": -15
 }

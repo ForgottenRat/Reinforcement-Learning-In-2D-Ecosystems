@@ -147,10 +147,9 @@ class DQNetwork(nn.Module):
     def save_model(self, file_path):
         try:
             torch.save(self.state_dict(), file_path)
-            print(f"Model saved to {file_path}")
         
         except:
-            print("CRITICAL ERROR FAILED TO SAVE MODEL")
+            print("FAILED TO SAVE MODEL")
 
     def load_model(self, file_path):
         try:
@@ -213,7 +212,7 @@ class RLAnimal(Entity):
         #States: 0Living energy, 1Rep En, 2Chased, 3Age, 4Rep Urg, 5Nearby Mate, 6Food Prox, 7Predator Prox, 8Prey Prox
         self.states = [float(1), int(0), int(0), int(0), float(0), int(0), float(0), float(0), float(0)]
         self.hiding = False
-        self.epsilon: float = 0.9  # Exploration rate
+        self.epsilon: float = 1  # Exploration rate
         
         
     @classmethod
@@ -321,20 +320,25 @@ class RLAnimal(Entity):
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         
         optimizer.step()
-        if self.entity_manager.clock.day_counter %3 == 2:
-            print("MDOEL SAVE")
+
+        if done:
             if self.animal_type == "Deer":
                 model.save_model(f"./data/model/Deer_model.pth")
             elif self.animal_type == "Lion":
                 model.save_model(f"./data/model/Lion_model.pth")
-
+        
         # print("Q VALUES:", q_values)
         # print(f"Updated Q-value for task {self.task}: {q_value}")
         # print(f"Target Q-value: {target_q_value}")
         # print(f"Loss: {loss.item()}")
 
-
     def animal_update(self, delta_time):
+        if self.animal_type == "Deer":
+            model = self.model_deer
+        elif self.animal_type == "Lion":
+            model = self.model_lion
+        else:
+            return
         
         for resource_name, resource_requirement in self.resource_requirements.items():
             if self.states[0] > 1:
@@ -412,10 +416,12 @@ class RLAnimal(Entity):
         else:
             self.states[8] = float(-1)  # No prey nearby
 
-        self.states[6] = min(self.states[6], 1e6)  # Cap the food proximity
-        self.states[7] = min(self.states[7], 1e6)  # Cap the predator proximity
-        self.states[8] = min(self.states[8], 1e6)  # Cap the prey proximity
-
+        for population in self.entity_manager.stats.populations.values():
+            if population == 0:
+                if self.animal_type == "Deer":
+                    model.save_model(f"./data/model/Deer_model.pth")
+                elif self.animal_type == "Lion":
+                    model.save_model(f"./data/model/Lion_model.pth")
 
 
     def assign_task(self, delta_time):
@@ -440,26 +446,25 @@ class RLAnimal(Entity):
                 # Optionally, print the read integer to verify
 
         if cycle_num!=0:
-            epsilon_temp = self.epsilon / (cycle_num/10)
+            epsilon_temp = 0.9 / (cycle_num/20)
+            print("EPSILON TEMP", epsilon_temp)
 
         if random.random() < epsilon_temp:
             # Explore: select a random task
-            self.task = random.randint(0, self.output_size - 1)
+            self.task = random.randint(0, 5)
         else:
             # Exploit: select the task with the highest Q-value
             topk_values, topk_indices = torch.topk(task_probabilities, 2)
             primary_task = topk_indices[0][0].item() 
             secondary_task = topk_indices[0][1].item() 
-            
             if primary_task not in self.task_history:
                 self.task = primary_task
             else:
                 self.task = secondary_task
-
         self.task_history.append(self.task)
-        self.perform_task(delta_time)
         self.states = [round(state, 2) for state in self.states]
         print(f"> {self.animal_type}-> Task: {self.task}, Age: {self.age}, States: {self.states}")
+        self.perform_task(delta_time)
 
     def perform_task(self, delta_time):
         if self.task == 0:
@@ -507,8 +512,6 @@ class RLAnimal(Entity):
         self.position.y += direction.y * self.speed * delta_time
         self.states[0] -= wander_energy_cost
 
-        
-        
     def gather(self, delta_time):
         gather_energy_gain = 0.35
         
@@ -561,7 +564,7 @@ class RLAnimal(Entity):
                         and entity.animal_type == self.animal_type 
                         and entity is not self 
                         and entity.states[1] == 1
-                        and entity.age > 3]  # Ensure the mate is also ready to reproduce
+                        and entity.age > 2]  # Ensure the mate is also ready to reproduce
 
         if not potential_mates:
             self.task = 0
@@ -644,13 +647,13 @@ class RLAnimal(Entity):
             self.learn_from_action(self.reproduction_reward, self.states, False)
 
     def hunt(self, delta_time):
-        hiding_energy_loss = 0.002
-        fail_energy_loss = 0.1
-        hunt_energy_gain = 0.6
-        hunt_energy_loss = 0.015
-        hunt_hiding_distance = 30
-        
-        
+        hiding_energy_loss = 0
+        fail_energy_loss = 0.05
+        hunt_energy_gain = 0.5
+        hunt_energy_loss = 0.0001
+        hunt_hiding_distance = 100
+        day_count = self.entity_manager.clock.day_counter
+    
         if self.prey == None:
             self.learn_from_action(self.hunting_reward, self.states, False)
             return
@@ -680,26 +683,29 @@ class RLAnimal(Entity):
         else:
             self.target.states[2] = int(1)
         
-        if self.target.hiding:  # Check if the prey is hiding
+        if self.target.hiding and random.random() > 0.004:  # Check if the prey is hiding
             distance_to_prey = self.position.distance_to(self.target.position)
             if distance_to_prey > hunt_hiding_distance:
                 self.pathfind_until(self.target.position, delta_time, hunt_hiding_distance)
-            else:
-                self.states[0] -= hiding_energy_loss
-            return
-
-        if self.pathfind_until(self.target.position, delta_time, 32):
-            self.states[0] += hunt_energy_gain
-            self.target.learn_from_action(-10, self.target.states, False)
-            self.target.destroy()
-            self.learn_from_action(self.hunting_reward, self.states, False)
-            self.task = 0
-            
+                self.states[0] -= hunt_energy_loss
 
         else:
-            self.states[0] -= fail_energy_loss
-            self.learn_from_action(0, self.states, False)
-            self.task = 0
+            if self.pathfind_until(self.target.position, delta_time, 32):
+                self.states[0] += hunt_energy_gain
+                self.target.learn_from_action(-10, self.target.states, False)
+                self.target.destroy()
+                self.learn_from_action(self.hunting_reward, self.states, False)
+                self.task = 0
+            
+            elif day_count < self.entity_manager.clock.day_counter or self.target not in self.entity_manager.entities:
+                self.states[0] -= fail_energy_loss
+                self.learn_from_action(0, self.states, False)
+                self.task = 0
+
+            else:
+                self.states[0] -= hunt_energy_loss
+
+            
                     
     def escape(self, delta_time):
         escape_energy_cost = 0.006
@@ -824,4 +830,4 @@ class RLAnimal(Entity):
 
         return False
 
-        
+
