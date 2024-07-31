@@ -7,18 +7,18 @@
             "neededForSurvival": true,
             "neededForReproduction": true,
             "priority": 0,
-            "DailyEnergyUsageRate": 0.10,
-            "ReproductionEnergyUsage": 0.30
+            "DailyEnergyUsageRate": 0.1,
+            "ReproductionEnergyUsage": 0.25
         }
     },
-    "base_speed": [55, 80],
+    "base_speed": [55, 65],
     "prey": {
         "Deer": 3
     },
     "resource_on_death": "scavenger_meat",
     "resource_count_on_death": 3,
     "starting_number": 4,
-    "reproduction_reward": 15,
+    "reproduction_reward": 10,
     "living_reward": 5,
     "gathering_reward": -15,
     "hunting_reward": 10,
