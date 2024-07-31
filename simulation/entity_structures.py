@@ -195,6 +195,10 @@ class RLAnimal(Entity):
     hiding_reward: int
     escaping_reward: int
 
+    #Reproduction Control
+    reproduction_count: int = 0
+    last_reproduction_day: int = -1
+
 
     def __post_init__(self):
         super().__post_init__()
@@ -209,8 +213,8 @@ class RLAnimal(Entity):
         self.task_history.append(-1)
         #Task: 0Wander, 1gather, 2reproduce, 3hunt, 4escape, 5hide
         self.task = [int(0), int(0), int(0), int(0),int(0), int(0)]
-        #States: 0Living energy, 1Rep En, 2Chased, 3Age, 4Rep Urg, 5Nearby Mate, 6Food Prox, 7Predator Prox, 8Prey Prox
-        self.states = [float(1), int(0), int(0), int(0), float(0), int(0), float(0), float(0), float(0)]
+        #States: 0Living energy, 1Rep En, 2Chased, 3Age, 4Rep Urg, 5Food Prox, 6Predator Prox, 7Prey Prox
+        self.states = [float(1), int(0), int(0), int(0), float(0), float(0), float(0), float(0)]
         self.hiding = False
         self.epsilon: float = 0.9  # Exploration rate
         
@@ -218,7 +222,7 @@ class RLAnimal(Entity):
     def initialize_animals(self, animal, entity_manager):
         # Load configurations
         import simulation.resources
-        self.input_size = 9  # State size
+        self.input_size = 8  # State size
         self.hidden_size = 64
         self.output_size = 6  # Task size
         path_deer = "./data/model/Deer_model.pth"
@@ -235,11 +239,11 @@ class RLAnimal(Entity):
             model_lion.load_state_dict(model_lion_w)
         
         model_deer.eval()
-        optimizer_deer = optim.Adam(model_deer.parameters(), lr=0.01)
+        optimizer_deer = optim.SGD(model_deer.parameters(), lr=0.01, momentum=0.9)
         criterion_deer = nn.BCEWithLogitsLoss()
 
         model_lion.eval()
-        optimizer_lion = optim.Adam(model_lion.parameters(), lr=0.01)
+        optimizer_lion = optim.SGD(model_lion.parameters(), lr=0.01, momentum=0.9)
         criterion_lion = nn.BCEWithLogitsLoss()
 
         for _ in range(animal["starting_number"]):
@@ -358,12 +362,29 @@ class RLAnimal(Entity):
                 self.learn_from_action(self.death_by_hunger_reward,self.states,True)
                 self.destroy()
                 return
-    
-            if self.states[0] < resource_requirement.ReproductionEnergyUsage:
-                self.states[1] = int(0)
-            
-            else:
+
+
+            # Check reproduction conditions and availability of a mate
+            available_mate = any(
+                isinstance(entity, RLAnimal) and
+                entity.animal_type == self.animal_type and
+                entity is not self and
+                entity.age >= 3 and
+                entity.states[1] >= 1
+                for entity in self.entity_manager.entities
+            )
+
+            if (
+                self.states[0] > resource_requirement.ReproductionEnergyUsage and
+                self.reproduction_count < 4 and
+                (self.entity_manager.clock.day_counter + 1) > self.last_reproduction_day and
+                available_mate
+            ):
                 self.states[1] = int(1)
+            else:
+                self.states[1] = int(0)
+
+
 
             if self.age > self.max_age:
                 self.learn_from_action(0, self.states, True)
@@ -379,22 +400,15 @@ class RLAnimal(Entity):
                         else:
                             self.states[2] = int(0)
                             return
-        
-        #Nearby Mates Count
-        nearby_mates = len([entity for entity in self.entity_manager.entities
-                        if isinstance(entity, RLAnimal) and entity.animal_type == self.animal_type
-                        and entity is not self and entity.age >= 2 and entity.states[1] >= 1 
-                        and entity.position.distance_to(self.position) < 80])  # Adjust distance as needed
-        self.states[5] = nearby_mates
 
         # Update food proximity
         food_sources = [entity for entity in self.entity_manager.entities
                         if isinstance(entity, simulation.resources.Resource)]  # Adjust condition to match your food resource entities
         if food_sources:
             closest_food_distance = min(food.position.distance_to(self.position) for food in food_sources)
-            self.states[6] = closest_food_distance
+            self.states[5] = closest_food_distance
         else:
-            self.states[6] = float(-1)  # No food available
+            self.states[5] = float(-1)  # No food available
 
         # Update predator proximity
         predators = [entity for entity in self.entity_manager.entities
@@ -402,18 +416,18 @@ class RLAnimal(Entity):
                     and entity.prey and self.animal_type in entity.prey]  # Adjust condition to match your predator entities
         if predators:
             closest_predator_distance = min(predator.position.distance_to(self.position) for predator in predators)
-            self.states[7] = closest_predator_distance
+            self.states[6] = closest_predator_distance
         else:
-            self.states[7] = float(-1)  # No predators nearby
+            self.states[6] = float(-1)  # No predators nearby
 
         # Update prey proximity
         prey_list = [entity for entity in self.entity_manager.entities
                     if isinstance(entity, RLAnimal) and entity.animal_type in self.prey]  # Adjust condition to match your prey entities
         if prey_list:
             closest_prey_distance = min(prey.position.distance_to(self.position) for prey in prey_list)
-            self.states[8] = closest_prey_distance
+            self.states[7] = closest_prey_distance
         else:
-            self.states[8] = float(-1)  # No prey nearby
+            self.states[7] = float(-1)  # No prey nearby
 
         for population in self.entity_manager.stats.populations.values():
             if population == 0:
@@ -648,6 +662,9 @@ class RLAnimal(Entity):
             child.task = 0
             self.task = 0
             mate.task = 0
+
+            self.reproduction_count += 1
+            self.last_reproduction_day = self.entity_manager.clock.day_counter
             
             
             print(f"- - - - - - - - - - - - - - - ->Animal {self.animal_type} reproduced")
