@@ -49,6 +49,7 @@ class EntityManager():
     stats: simulation.output.Stats
     textures: list
     summary: SimulationSummary = None
+
     
     def __post_init__(self):
         self.sprite_list = arcade.SpriteList(True)
@@ -67,13 +68,17 @@ class EntityManager():
                 entity.assign_task(delta_time)
 
     def update(self, delta_time):
-        for entity in self.entities:
-            entity.update(delta_time)
+        self.remove_old_resources()
+    
+    def remove_old_resources(self):
+        current_day = self.clock.day_counter
+        lifespan = 2  # Lifespan of resources in days
+        for entity in list(self.entities):  # Create a copy of the list to avoid modification during iteration
+            if isinstance(entity, simulation.resources.Resource):
+                if current_day - entity.last_accessed_day > lifespan and random.random()>0.5:
+                    entity.destroy()
+                
             
-        if self.clock.new_day:
-            self.clock.new_day = False
-            self.assign_task_for_all_animals(delta_time)
-            self.record_daily_data()
 
     def record_daily_data(self):
         day_data = {
@@ -289,6 +294,7 @@ class RLAnimal(Entity):
             self.entity_manager.clock.new_day = False
             self.entity_manager.assign_task_for_all_animals(delta_time)
             self.entity_manager.record_daily_data()
+            self.entity_manager.update(delta_time)
         self.perform_task(delta_time)
     
     def learn_from_action(self, reward, next_state, done):
@@ -376,9 +382,9 @@ class RLAnimal(Entity):
 
             if (
                 self.states[0] > resource_requirement.ReproductionEnergyUsage and
-                self.reproduction_count < 4 and
+                self.reproduction_count <= 1 and
                 (self.entity_manager.clock.day_counter + 1) > self.last_reproduction_day and
-                available_mate
+                self.age >= 3
             ):
                 self.states[1] = int(1)
             else:
@@ -445,7 +451,7 @@ class RLAnimal(Entity):
         else:
             task_probabilities = torch.zeros(self.output_size).to(device)
             print("Unidentified Animal for task assign")
-        
+        print(task_probabilities)
         file_name = "cycle_num"
         cycle_num = 0
         if os.path.exists(file_name):
@@ -458,7 +464,7 @@ class RLAnimal(Entity):
                 # Optionally, print the read integer to verify
 
         if cycle_num!=0:
-            epsilon_temp = self.epsilon / (cycle_num/20)
+            epsilon_temp = self.epsilon / (cycle_num/15)
 
         if random.random() < epsilon_temp:
             # Explore: select a random task
@@ -467,18 +473,18 @@ class RLAnimal(Entity):
             # Exploit: select the task with the highest Q-value
             topk_values, topk_indices = torch.topk(task_probabilities, 2)
             primary_task = topk_indices[0][0].item() 
-            secondary_task = topk_indices[0][1].item() 
-            if primary_task not in self.task_history:
-                self.task = primary_task
-            else:
-                self.task = secondary_task
+            # secondary_task = topk_indices[0][1].item() 
+            # if primary_task not in self.task_history:
+            self.task = primary_task
+            # else:
+            #     self.task = secondary_task
         
         #Reproduction Urge
         if self.states[4] >= 0.6:
             if random.random() < self.states[4]:
                 self.task = 2
         
-        self.task_history.append(self.task)
+        # self.task_history.append(self.task)
         self.states = [round(state, 2) for state in self.states]
         print(f"> {self.animal_type}-> Task: {self.task}, Age: {self.age}, States: {self.states}")
 
@@ -569,13 +575,14 @@ class RLAnimal(Entity):
         import simulation.resources
         
         for resource_name, resource_requirement in self.resource_requirements.items():
-            if self.states[0] < resource_requirement.ReproductionEnergyUsage:
-                self.learn_from_action(-10, self.states, False)
-                self.task = 0
-                return
+            usage = resource_requirement.ReproductionEnergyUsage
+        if self.states[1] == 0:
+            self.learn_from_action(-10, self.states, False)
+            self.task = 0
+            return
             
-        usage = resource_requirement.ReproductionEnergyUsage
-        child_energy = 0.35
+        
+        child_energy = 0.5
         mate_usage = 0.1
 
         # Select potential mates
@@ -597,6 +604,7 @@ class RLAnimal(Entity):
 
         # Move towards the mate
         if mate not in self.entity_manager.entities:
+            print("MATE DIE")
             self.task = 0
             return
 

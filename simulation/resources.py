@@ -6,9 +6,13 @@ import json
 class Resource(entity_structures.Entity):
     name: str
     quantity: int
+    last_accessed_day: int
+
     def __post_init__(self):
         super().__post_init__()
         self.entity_type = entity_structures.EntityType.resource
+        self.last_accessed_day = self.entity_manager.clock.day_counter
+    
 @dataclass
 class ResourceManager():
     path_to_data: str

@@ -1,13 +1,13 @@
 {
     "animal_type": "Lion",
     "texture": "animal_lion",
-    "max_age": 15,
+    "max_age": 11,
     "resource_requirements": {
         "carnivore_food": {
             "neededForSurvival": true,
             "neededForReproduction": true,
             "priority": 0,
-            "DailyEnergyUsageRate": 0.1,
+            "DailyEnergyUsageRate": 0.09,
             "ReproductionEnergyUsage": 0.25
         }
     },
@@ -17,12 +17,12 @@
     },
     "resource_on_death": "scavenger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 4,
-    "reproduction_reward": 10,
+    "starting_number": 5,
+    "reproduction_reward": 5,
     "living_reward": 5,
-    "gathering_reward": -15,
-    "hunting_reward": 10,
-    "death_by_hunger_reward": -30,
-    "hiding_reward": -15,
-	"escaping_reward": -15
+    "gathering_reward": -30,
+    "hunting_reward": 15,
+    "death_by_hunger_reward": -40,
+    "hiding_reward": -30,
+	"escaping_reward": -30
 }
