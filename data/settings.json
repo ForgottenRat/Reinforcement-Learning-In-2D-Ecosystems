@@ -4,5 +4,5 @@
 "window_width":"2560", "window_height":"1440",
 "window_title":"Reinforcement-Learning-In-2D-Ecosystems",
 "clock_speed": 10,
-"training_mode": "True"
+"training_mode": "False"
 }
