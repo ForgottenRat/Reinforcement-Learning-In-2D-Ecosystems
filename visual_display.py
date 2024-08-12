@@ -144,7 +144,7 @@ class MenuView(arcade.View):  # MENU VIEW
             self.cloud_list.append(cloud)
 
     def setup(self):
-        self.cloud_list = arcade.SpriteList(use_spatial_hash=True)
+        self.cloud_list = arcade.SpriteList(use_spatial_hash=False)
         self.add_clouds(15)
         arcade.schedule(self.update, 1/60)
     
@@ -264,6 +264,7 @@ class SimulationView(arcade.View):
         self.fps_text.text = f"FPS: {round(arcade.get_fps())}"
         self.day_counter_text.text = f"Day Counter: {self.clock.day_counter}"
 
+        
 
     def restart_simulation(self):
         print(''' -----> Restarting Simulation <-----
@@ -297,6 +298,10 @@ class SimulationView(arcade.View):
         if key == arcade.key.ESCAPE:
             self.MenuView_Change()
 
+        if TRAINING_MODE == "False":
+            # Generate and save the summary JSON
+            self.entity_manager.generate_summary_json()
+
     def MenuView_Change(self):
         print("View Change To MenuView")
         menu_view = MenuView()
@@ -309,9 +314,11 @@ def main():  # MAIN FUNCTION
         width=WINDOW_WIDTH,
         height=WINDOW_HEIGHT,
         title=WINDOW_TITLE,
-        antialiasing=False,
+        antialiasing=True,
         enable_polling=True,
-        fullscreen=False     
+        fullscreen=False,
+        center_window = True,
+        resizable=False
         )
 
     font_loader(fonts, font_path)

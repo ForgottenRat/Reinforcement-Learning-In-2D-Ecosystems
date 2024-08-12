@@ -52,7 +52,7 @@ class EntityManager():
 
     
     def __post_init__(self):
-        self.sprite_list = arcade.SpriteList(True)
+        self.sprite_list = arcade.SpriteList(use_spatial_hash=False)
         self.summary = SimulationSummary(days=0, daily_population=[], daily_animal_data=[])
 
     def check_population(self):
@@ -123,10 +123,10 @@ class Entity:
     def __post_init__(self):
         self.entity_manager.entities.append(self)
         self.entity_type = EntityType.none        
-        self.sprite = arcade.Sprite(self.entity_manager.textures[self.texture_name],1.35,self.position.x,self.position.y)
+        self.sprite = arcade.Sprite(self.entity_manager.textures[self.texture_name],1.35,self.position.x,self.position.y, hit_box_algorithm=None)
         self.entity_manager.sprite_list.append(self.sprite)
 
-    def destroy(self):
+    def destroy(self): 
         self.entity_manager.entities.remove(self)
         try:
             self.entity_manager.sprite_list.remove(self.sprite)
@@ -139,14 +139,18 @@ class DQNetwork(nn.Module):
         super(DQNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, output_size)
+        self.fc2 = nn.Linear(hidden_size, 32)
+        self.fc3 = nn.Linear(32, output_size)
         torch.nn.init.kaiming_normal_(self.fc1.weight, mode='fan_out', nonlinearity='relu')
         torch.nn.init.kaiming_normal_(self.fc2.weight, mode='fan_out', nonlinearity='relu')
+        torch.nn.init.kaiming_normal_(self.fc3.weight, mode='fan_out', nonlinearity='relu')
 
     def forward(self, x):
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
+        x = self.relu(x)
+        x = self.fc3(x)
         return x
     
     def save_model(self, file_path):
@@ -222,6 +226,7 @@ class RLAnimal(Entity):
         self.states = [float(1), int(0), int(0), int(0), float(0), float(0), float(0), float(0)]
         self.hiding = False
         self.epsilon: float = 0.9  # Exploration rate
+        self.reproduction_timer_main: float = 0.0
         
     @classmethod
     def initialize_animals(self, animal, entity_manager):
@@ -279,13 +284,11 @@ class RLAnimal(Entity):
                     optimizer_lion = optimizer_lion,
                     criterion_deer = criterion_deer,
                     criterion_lion = criterion_lion,
-                    id = str(random.randint(0,999999))
+                    id = str(random.randint(0,999))
             )
         
     def update(self, delta_time):
-        self.sprite.center_x = self.position.x
-        self.sprite.center_y = self.position.y
-
+        self.sprite.position = (self.position.x, self.position.y)
         for entity in self.entity_manager.entities:
             if isinstance(entity, RLAnimal):
                 entity.animal_update(delta_time)
@@ -361,7 +364,37 @@ class RLAnimal(Entity):
                     self.learn_from_action(self.living_reward, self.states, False)
                     if self.entity_manager.clock.day_counter == 1:
                         self.age = 1
-                    
+                # Define population thresholds for reproduction adjustments
+                population_threshold = 6  # Minimum population level to boost reproduction urge
+
+                # Different high population thresholds for deer and lion
+                high_population_deer = 34
+                high_population_lion = 11
+
+                # Reproduction urge adjustments
+                reproduction_urge_boost = 0.4  # Amount to increase the reproduction urge
+                reproduction_urge_decrease = 0.2  # Amount to decrease the reproduction urge
+
+                # Get the current population for the animal type
+                current_population = self.entity_manager.stats.populations[self.animal_type]
+
+                # Adjust reproduction urge based on population size
+                if current_population < population_threshold:
+                    # Boost reproduction urge when population is low
+                    self.states[4] += reproduction_urge_boost
+
+                # Check for high population and decrease reproduction urge accordingly
+                if self.animal_type == "Deer" and current_population > high_population_deer:
+                    self.states[4] -= reproduction_urge_decrease
+
+                if self.animal_type == "Lion" and current_population > high_population_lion:
+                    self.states[4] -= reproduction_urge_decrease
+
+                # Ensure the reproduction urge stays within bounds
+                if self.states[4] > 1.0:
+                    self.states[4] = 1.0
+                if self.states[4] < 0.0:
+                    self.states[4] = 0.0  # Optional: ensure it doesn't go below 0
                     
             if self.states[0] <= 0:
                 self.states[0] = 0
@@ -384,7 +417,7 @@ class RLAnimal(Entity):
                 self.states[0] > resource_requirement.ReproductionEnergyUsage and
                 self.reproduction_count <= 1 and
                 (self.entity_manager.clock.day_counter + 1) > self.last_reproduction_day and
-                self.age >= 3
+                self.age >= 5
             ):
                 self.states[1] = int(1)
             else:
@@ -451,7 +484,7 @@ class RLAnimal(Entity):
         else:
             task_probabilities = torch.zeros(self.output_size).to(device)
             print("Unidentified Animal for task assign")
-        print(task_probabilities)
+
         file_name = "cycle_num"
         cycle_num = 0
         if os.path.exists(file_name):
@@ -481,7 +514,7 @@ class RLAnimal(Entity):
         
         #Reproduction Urge
         if self.states[4] >= 0.6:
-            if random.random() < self.states[4]:
+            if random.random() < 0.7:
                 self.task = 2
         
         # self.task_history.append(self.task)
@@ -574,6 +607,18 @@ class RLAnimal(Entity):
     def reproduce(self, delta_time):
         import simulation.resources
         
+        if self.states[4] < 0.3:
+            self.learn_from_action(-10, self.states, False)
+            self.task = 0
+
+        # Start the reproduction timer if it hasn't been started yet
+        if self.reproduction_timer_main > 0:
+            self.reproduction_timer_main -= delta_time
+            if self.reproduction_timer_main <= 0:
+                self.reproduction_timer_main = 0
+            self.task = 0
+            return
+
         for resource_name, resource_requirement in self.resource_requirements.items():
             usage = resource_requirement.ReproductionEnergyUsage
         if self.states[1] == 0:
@@ -581,9 +626,7 @@ class RLAnimal(Entity):
             self.task = 0
             return
             
-        
         child_energy = 0.5
-        mate_usage = 0.1
 
         # Select potential mates
         potential_mates = [entity for entity in self.entity_manager.entities 
@@ -604,7 +647,6 @@ class RLAnimal(Entity):
 
         # Move towards the mate
         if mate not in self.entity_manager.entities:
-            print("MATE DIE")
             self.task = 0
             return
 
@@ -621,7 +663,7 @@ class RLAnimal(Entity):
             
             # Inherit attributes with some variability
             child_speed = random.choice([self.speed, mate.speed]) + random.uniform(-0.15, 0.1)
-            child_id = str(self.id) + "_" + str(mate.id) + "_" + str(random.randint(0, 999999))
+            child_id = str(self.id) + "_" + str(mate.id) + "_" + str(random.randint(0, 999))
 
             child = RLAnimal(
                 position=child_position,
@@ -663,8 +705,7 @@ class RLAnimal(Entity):
                 usage = resource_requirement.ReproductionEnergyUsage
                 child.states[0] = child_energy
                 self.states[0] -= usage
-                mate.states[0] -= mate_usage
-            
+                mate.states[0] -= usage
             
             # Assign initial task to the child and parents
             child.task = 0
@@ -674,6 +715,8 @@ class RLAnimal(Entity):
             self.reproduction_count += 1
             self.last_reproduction_day = self.entity_manager.clock.day_counter
             
+            # Set the reproduction timer to 5 seconds (similar to how hiding works)
+            self.reproduction_timer_main = 5.0
             
             print(f"- - - - - - - - - - - - - - - ->Animal {self.animal_type} reproduced")
             self.learn_from_action(self.reproduction_reward, self.states, False)
@@ -681,7 +724,7 @@ class RLAnimal(Entity):
     def hunt(self, delta_time):
         hiding_energy_loss = 0.0001
         fail_energy_loss = 0.05
-        hunt_energy_gain = 0.4
+        hunt_energy_gain = 0.55
         hunt_energy_loss = 0.0001
         hunt_hiding_distance = 85
         day_count = self.entity_manager.clock.day_counter
@@ -745,16 +788,18 @@ class RLAnimal(Entity):
         if self.animal_type == "Lion":
             self.learn_from_action(self.escaping_reward, self.states, False)
             self.task = 0
+            return
 
         if self.states[2] == int(0):
-            self.learn_from_action(-1, self.states, False)
+            self.learn_from_action(-10, self.states, False)
+            self.task = 0
             return
         predators = list()
         for entity in self.entity_manager.entities:
             if type(entity) is type(RLAnimal) and entity.target == self:
                 predators.append(entity)
         if not predators:
-            self.learn_from_action(-1, self.states, False)
+            self.learn_from_action(-10, self.states, False)
             self.task = 0
             self.states[2] == int(0)
             return
@@ -785,9 +830,11 @@ class RLAnimal(Entity):
             self.task = 0
     
     def hide(self, delta_time):
-        hide_energy_gain = 0.25
+        hide_energy_gain = 0.35
         hide_duration = 7
-
+        if self.animal_type == "Lion":
+            self.learn_from_action(self.escaping_reward, self.states, False)
+            self.task = 0
         import simulation.resources
         #consider which resource is highest priority
         resource_requirements = sorted(self.resource_requirements.items(),key=lambda x: x[1].priority)
