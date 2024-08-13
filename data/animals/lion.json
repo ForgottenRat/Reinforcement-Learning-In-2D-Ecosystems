@@ -17,7 +17,7 @@
     },
     "resource_on_death": "scavenger_meat",
     "resource_count_on_death": 3,
-    "starting_number": 35,  
+    "starting_number": 5,  
     "reproduction_reward": 15,
     "living_reward": 30,  
     "gathering_reward": -30,
