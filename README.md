@@ -54,7 +54,7 @@ Uses the `Arcade` library to display the simulation, offering a menu-driven inte
     ```
 3. Run the simulation:
     ```bash
-    python main.py
+    python visual_display.py
     ```
 
 ## Usage
